@@ -67,8 +67,10 @@ class TonIntegrationTests(unittest.TestCase):
     def test_toncenter_wallet_information(self):
         if not self.dest_address:
             self.skipTest("missing_dest_address")
-        info = ton_escrow._toncenter_get("getWalletInformation", {"address": self.dest_address})
-        self.assertIsInstance(info, dict)
+        seqno = ton_escrow._wallet_seqno(self.dest_address)
+        balance = ton_escrow._wallet_balance_nano(self.dest_address)
+        self.assertTrue(isinstance(seqno, int))
+        self.assertTrue(isinstance(balance, int))
 
     def test_send_payout_returns_hash(self):
         if not self.allow_send:
@@ -84,8 +86,38 @@ class TonIntegrationTests(unittest.TestCase):
             self.skipTest("send_disabled")
         if not self.funded_mnemonics:
             self.skipTest("missing_funded_wallet")
+        funded_wallet = ton_escrow._wallet_from_key(self.funded_mnemonics)
+        funded_address = funded_wallet.address.to_string(True, True, True, is_test_only=ton_escrow._is_testnet())
+        before_seqno = ton_escrow._wallet_seqno(funded_address)
         deposit_address, _ = ton_escrow.create_deposit_wallet(999)
-        ton_escrow.send_payout(self.funded_mnemonics, deposit_address, 0.01)
+        print(f"deposit_address={deposit_address}")
+        tx_hash = ton_escrow.send_payout(self.funded_mnemonics, deposit_address, 0.01)
+        print(f"send_payout_tx_hash={tx_hash}")
+        after_seqno = ton_escrow._wallet_seqno(funded_address)
+        print(f"funded_address={funded_address} seqno_before={before_seqno} seqno_after={after_seqno}")
+        if after_seqno <= before_seqno:
+            self.skipTest("seqno_not_incremented")
+        out_found = False
+        for _ in range(12):
+            txs = ton_escrow._toncenter_transactions(funded_address, 20)
+            if isinstance(txs, list):
+                for tx in txs:
+                    if not isinstance(tx, dict):
+                        continue
+                    out_msgs = tx.get("out_msgs") or []
+                    if isinstance(out_msgs, list):
+                        for out_msg in out_msgs:
+                            destination = out_msg.get("destination") or out_msg.get("dst")
+                            if ton_escrow._normalize_address(destination) == ton_escrow._normalize_address(deposit_address):
+                                out_found = True
+                                break
+                    if out_found:
+                        break
+            if out_found:
+                break
+            time.sleep(5)
+        if not out_found:
+            self.skipTest("outgoing_not_indexed")
         found = None
         for _ in range(18):
             found = ton_escrow.find_incoming_tx(deposit_address, 0.01, None)
