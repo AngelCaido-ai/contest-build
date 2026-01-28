@@ -81,3 +81,57 @@ def create_channel(payload: dict) -> dict:
     resp = requests.post(_url("/bot/channels"), json=payload, headers=_headers())
     resp.raise_for_status()
     return resp.json()
+
+
+def list_deals(tg_user_id: int) -> list[dict]:
+    resp = requests.get(_url("/bot/deals"), params={"tg_user_id": tg_user_id}, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def list_channels(tg_user_id: int) -> list[dict]:
+    resp = requests.get(_url("/bot/channels"), params={"tg_user_id": tg_user_id}, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def list_listings() -> list[dict]:
+    resp = requests.get(_url("/listings"), headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_listing(listing_id: int) -> dict:
+    resp = requests.get(_url(f"/listings/{listing_id}"), headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def list_requests() -> list[dict]:
+    resp = requests.get(_url("/requests"), headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_request(request_id: int) -> dict:
+    resp = requests.get(_url(f"/requests/{request_id}"), headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_listing(payload: dict) -> dict:
+    resp = requests.post(_url("/bot/listings"), json=payload, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_request(payload: dict) -> dict:
+    resp = requests.post(_url("/bot/requests"), json=payload, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_deal(payload: dict) -> dict:
+    resp = requests.post(_url("/bot/deals"), json=payload, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()

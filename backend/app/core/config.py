@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     telethon_session: str | None = None
     ton_hot_wallet: str | None = None
     ton_api_key: str | None = None
+    ton_network: str = "mainnet"
+    ton_api_url: str = "https://toncenter.com/api/v2"
+    ton_api_timeout_seconds: int = 10
+    ton_reserve_ton: float = 0.02
+    ton_deposit_comment_prefix: str = "deal"
+    escrow_secret_key: str | None = None
     bot_log_chat_id: int | None = None
     payment_timeout_minutes: int = 1440
     verification_window_minutes: int = 60

@@ -6,8 +6,14 @@ from app.models.channel import Channel
 from app.models.deal import Deal
 from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
-from app.schemas.escrow import EscrowConfirmRequest, EscrowDepositRequest, EscrowOut
-from app.services.escrow_service import confirm_payment, create_deposit
+from app.schemas.escrow import (
+    EscrowConfirmRequest,
+    EscrowDepositRequest,
+    EscrowOut,
+    EscrowRefundRequest,
+    EscrowReleaseRequest,
+)
+from app.services.escrow_service import confirm_payment, create_deposit, refund_payment, release_payment
 
 router = APIRouter()
 
@@ -51,4 +57,50 @@ def confirm_deposit(
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = confirm_payment(db, deal, payment, payload.tx_hash)
+    return EscrowOut.model_validate(updated)
+
+
+@router.post(
+    "/deals/{deal_id}/release",
+    response_model=EscrowOut,
+    dependencies=[Depends(get_bot_secret)],
+)
+def release_escrow(
+    deal_id: int,
+    payload: EscrowReleaseRequest,
+    db: Session = Depends(get_db),
+) -> EscrowOut:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+    if not payment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        updated = release_payment(db, deal, payload.payout_address)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return EscrowOut.model_validate(updated)
+
+
+@router.post(
+    "/deals/{deal_id}/refund",
+    response_model=EscrowOut,
+    dependencies=[Depends(get_bot_secret)],
+)
+def refund_escrow(
+    deal_id: int,
+    payload: EscrowRefundRequest,
+    db: Session = Depends(get_db),
+) -> EscrowOut:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+    if not payment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        updated = refund_payment(db, deal, payload.refund_address, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return EscrowOut.model_validate(updated)

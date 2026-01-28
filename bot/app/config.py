@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,7 +7,17 @@ class BotSettings(BaseSettings):
     api_base_url: str = "http://localhost:8000"
     bot_secret: str
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    @field_validator("bot_token", "bot_secret", "api_base_url", mode="before")
+    @classmethod
+    def normalize_env(cls, v):
+        if isinstance(v, str):
+            value = v.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1].strip()
+            return value
+        return v
+
+    model_config = SettingsConfigDict(extra="ignore")
 
 
 settings = BotSettings()

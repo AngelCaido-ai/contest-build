@@ -10,12 +10,14 @@ from app.tasks.deal_tasks import (
     check_payment_timeouts,
     check_verification_windows,
     process_scheduled_posts,
+    scan_escrow_deposits,
 )
 
 
 def main() -> None:
     while True:
         queue.enqueue(check_payment_timeouts)
+        queue.enqueue(scan_escrow_deposits)
         queue.enqueue(process_scheduled_posts)
         queue.enqueue(check_deleted_posts)
         queue.enqueue(check_verification_windows)

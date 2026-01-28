@@ -57,82 +57,52 @@ export default function App() {
     setStatus("Authenticated");
   };
 
-  const apiFetch = async (path: string, options: RequestInit = {}, requireAuth = false) => {
+  const apiFetch = async (path: string, options: RequestInit = {}) => {
     const headers = { ...(options.headers ?? {}) } as Record<string, string>;
-    const currentToken = localStorage.getItem("token") ?? token;
-    if (currentToken) {
-      headers.Authorization = `Bearer ${currentToken}`;
-    } else if (requireAuth) {
-      throw new Error("Authentication required");
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
     headers["Content-Type"] = "application/json";
     const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
     if (!res.ok) {
-      if (res.status === 401 && !requireAuth) {
-        throw new Error("Authentication required");
-      }
       throw new Error("API error");
     }
     return res.json();
   };
 
   const loadListings = async () => {
-    try {
-      const items = await apiFetch("/listings");
-      setListings(items);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to load listings");
-    }
+    const items = await apiFetch("/listings");
+    setListings(items);
   };
 
   const loadRequests = async () => {
-    try {
-      const items = await apiFetch("/requests");
-      setRequests(items);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to load requests");
-    }
+    const items = await apiFetch("/requests");
+    setRequests(items);
   };
 
   const loadDeals = async () => {
-    try {
-      const items = await apiFetch("/deals");
-      setDeals(items);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to load deals");
-    }
+    const items = await apiFetch("/deals");
+    setDeals(items);
   };
 
   const createRequest = async () => {
     const budget = reqBudget ? parseFloat(reqBudget) : null;
     const brief = reqBrief || null;
-    try {
-      await apiFetch("/requests", {
-        method: "POST",
-        body: JSON.stringify({ budget, brief }),
-      }, true);
-      setStatus("Request created");
-      setReqBrief("");
-      setReqBudget("");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to create request");
-    }
+    await apiFetch("/requests", {
+      method: "POST",
+      body: JSON.stringify({ budget, brief }),
+    });
+    setStatus("Request created");
   };
 
   const createListing = async () => {
     const channel_id = listingChannelId ? parseInt(listingChannelId, 10) : null;
     const price_usd = listingPrice ? parseFloat(listingPrice) : null;
-    try {
-      await apiFetch("/listings", {
-        method: "POST",
-        body: JSON.stringify({ channel_id, price_usd, format: "post" }),
-      }, true);
-      setStatus("Listing created");
-      setListingChannelId("");
-      setListingPrice("");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to create listing");
-    }
+    await apiFetch("/listings", {
+      method: "POST",
+      body: JSON.stringify({ channel_id, price_usd, format: "post" }),
+    });
+    setStatus("Listing created");
   };
 
   const openBot = () => {

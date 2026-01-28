@@ -1,4 +1,5 @@
 from aiogram import Bot, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -19,8 +20,12 @@ async def add_channel(message: Message, bot: Bot) -> None:
     except Exception:
         await message.answer("Channel not found")
         return
-    user_member = await bot.get_chat_member(chat.id, message.from_user.id)
-    bot_member = await bot.get_chat_member(chat.id, (await bot.me()).id)
+    try:
+        user_member = await bot.get_chat_member(chat.id, message.from_user.id)
+        bot_member = await bot.get_chat_member(chat.id, (await bot.me()).id)
+    except TelegramBadRequest:
+        await message.answer("Cannot access member list. Make bot admin or use a public channel.")
+        return
     user_admin = user_member.status in {"administrator", "creator"}
     bot_admin = bot_member.status in {"administrator", "creator"}
     if not user_admin:

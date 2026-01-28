@@ -9,6 +9,7 @@ from app.models.creative import Creative
 from app.models.deal import Deal
 from app.models.enums import DealStatus
 from app.services.deal_service import log_event, set_status
+from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments
 from app.services.telegram_service import copy_message, send_message
 
 
@@ -21,6 +22,14 @@ def check_payment_timeouts() -> None:
             set_status(deal, DealStatus.CANCELED)
             log_event(db, deal.id, "PAYMENT_TIMEOUT")
         db.commit()
+    finally:
+        db.close()
+
+
+def scan_escrow_deposits() -> None:
+    db: Session = SessionLocal()
+    try:
+        scan_incoming_payments(db)
     finally:
         db.close()
 
@@ -89,11 +98,15 @@ def check_verification_windows() -> None:
             if now < start + timedelta(minutes=window):
                 continue
             if deal.tampered or deal.deleted:
-                set_status(deal, DealStatus.REFUNDED)
-                log_event(db, deal.id, "REFUNDED")
+                try:
+                    refund_payment(db, deal, None, "verification_failed")
+                except ValueError as exc:
+                    log_event(db, deal.id, "ESCROW_REFUND_FAILED", {"error": str(exc)})
             else:
-                set_status(deal, DealStatus.RELEASED)
-                log_event(db, deal.id, "RELEASED")
+                try:
+                    release_payment(db, deal, None)
+                except ValueError as exc:
+                    log_event(db, deal.id, "ESCROW_RELEASE_FAILED", {"error": str(exc)})
         db.commit()
     finally:
         db.close()

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -13,3 +15,35 @@ class BotChannelCreate(BaseModel):
     title: str | None = None
     bot_admin_status: bool | None = None
     rights_snapshot: dict | None = None
+
+
+class BotListingCreate(BaseModel):
+    owner_tg_user_id: int
+    channel_id: int
+    price_ton: float | None = None
+    price_usd: float | None = None
+    format: str | None = "post"
+    categories: list[str] | None = None
+    constraints: dict | None = None
+    active: bool | None = True
+
+
+class BotRequestCreate(BaseModel):
+    advertiser_tg_user_id: int
+    budget: float | None = None
+    niche: str | None = None
+    languages: list[str] | None = None
+    min_subs: int | None = None
+    min_views: int | None = None
+    dates: dict | None = None
+    brief: str | None = None
+
+
+class BotDealCreate(BaseModel):
+    owner_tg_user_id: int
+    request_id: int
+    channel_id: int
+    price: float | None = None
+    format: str | None = None
+    publish_at: datetime | None = None
+    verification_window: int | None = None
