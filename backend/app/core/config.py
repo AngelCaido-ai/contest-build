@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     ton_network: str = "mainnet"
     ton_api_url: str = "https://toncenter.com/api/v2"
     ton_api_timeout_seconds: int = 10
+    ton_wallet_id: int | None = None
+    ton_wallet_subwallet: int | None = None
+    ton_wallet_version: str | None = None
     ton_reserve_ton: float = 0.02
     ton_deposit_comment_prefix: str = "deal"
     escrow_secret_key: str | None = None
@@ -25,7 +28,7 @@ class Settings(BaseSettings):
     payment_timeout_minutes: int = 1440
     verification_window_minutes: int = 60
 
-    @field_validator("telethon_api_id", "bot_log_chat_id", mode="before")
+    @field_validator("telethon_api_id", "bot_log_chat_id", "ton_wallet_id", "ton_wallet_subwallet", mode="before")
     @classmethod
     def parse_int_or_none(cls, v):
         if v == "" or v is None:

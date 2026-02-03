@@ -36,6 +36,9 @@ class TonIntegrationTests(unittest.TestCase):
         self._prev_timeout = settings.ton_api_timeout_seconds
         self._prev_escrow_key = settings.escrow_secret_key
         self._prev_reserve = settings.ton_reserve_ton
+        self._prev_wallet_version = settings.ton_wallet_version
+        self._prev_wallet_id = settings.ton_wallet_id
+        self._prev_wallet_subwallet = settings.ton_wallet_subwallet
         settings.ton_network = os.environ.get("TON_NETWORK", settings.ton_network)
         settings.ton_api_key = os.environ.get("TON_API_KEY", settings.ton_api_key)
         settings.ton_api_url = os.environ.get("TON_API_URL", settings.ton_api_url)
@@ -50,6 +53,15 @@ class TonIntegrationTests(unittest.TestCase):
         reserve = os.environ.get("TON_RESERVE_TON")
         if reserve:
             settings.ton_reserve_ton = float(reserve)
+        wallet_version = os.environ.get("TON_WALLET_VERSION")
+        if wallet_version:
+            settings.ton_wallet_version = wallet_version
+        wallet_id = os.environ.get("TON_WALLET_ID")
+        if wallet_id:
+            settings.ton_wallet_id = int(wallet_id)
+        wallet_subwallet = os.environ.get("TON_WALLET_SUBWALLET")
+        if wallet_subwallet:
+            settings.ton_wallet_subwallet = int(wallet_subwallet)
         if not settings.ton_api_key:
             self.skipTest("missing_ton_api_key")
         self.funded_mnemonics = os.environ.get("TON_FUNDED_MNEMONICS")
@@ -63,6 +75,9 @@ class TonIntegrationTests(unittest.TestCase):
         settings.ton_api_timeout_seconds = self._prev_timeout
         settings.escrow_secret_key = self._prev_escrow_key
         settings.ton_reserve_ton = self._prev_reserve
+        settings.ton_wallet_version = self._prev_wallet_version
+        settings.ton_wallet_id = self._prev_wallet_id
+        settings.ton_wallet_subwallet = self._prev_wallet_subwallet
 
     def test_toncenter_wallet_information(self):
         if not self.dest_address:
@@ -93,8 +108,13 @@ class TonIntegrationTests(unittest.TestCase):
         print(f"deposit_address={deposit_address}")
         tx_hash = ton_escrow.send_payout(self.funded_mnemonics, deposit_address, 0.01)
         print(f"send_payout_tx_hash={tx_hash}")
-        after_seqno = ton_escrow._wallet_seqno(funded_address)
-        print(f"funded_address={funded_address} seqno_before={before_seqno} seqno_after={after_seqno}")
+        after_seqno = before_seqno
+        for _ in range(10):
+            after_seqno = ton_escrow._wallet_seqno(funded_address)
+            print(f"funded_address={funded_address} seqno_before={before_seqno} seqno_after={after_seqno}")
+            if after_seqno > before_seqno:
+                break
+            time.sleep(3)
         if after_seqno <= before_seqno:
             self.skipTest("seqno_not_incremented")
         out_found = False

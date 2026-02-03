@@ -1,9 +1,17 @@
 import base64
 import os
+import time
+from dataclasses import dataclass
 from typing import Any
 
 import requests
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from pytoniq import Address as PytoniqAddress
+from pytoniq import StateInit as PytoniqStateInit
+from pytoniq.contract.wallets.wallet import mnemonic_to_private_key
+from pytoniq.contract.wallets.wallet_v5 import WALLET_V5_R1_CODE, WalletV5R1, WalletV5WalletID
+from pytoniq_core.boc import Builder, begin_cell
+from pytoniq_core.crypto.signature import sign_message
 from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from tonsdk.utils import Address, bytes_to_b64str, to_nano
 
@@ -51,15 +59,34 @@ def _toncenter_request(
     base_url = base_url or _toncenter_base_url_v2()
     url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
     params = params or {}
+    headers: dict[str, str] = {}
     if settings.ton_api_key:
-        params["api_key"] = settings.ton_api_key
-    response = requests.request(method, url, params=params, json=payload, timeout=settings.ton_api_timeout_seconds)
+        params.setdefault("api_key", settings.ton_api_key)
+        headers["X-API-Key"] = settings.ton_api_key
+    response = requests.request(
+        method,
+        url,
+        params=params,
+        json=payload,
+        headers=headers or None,
+        timeout=settings.ton_api_timeout_seconds,
+    )
     response.raise_for_status()
-    data = response.json()
-    if isinstance(data, dict) and data.get("ok") is False:
-        raise ValueError(data.get("error") or "ton_api_error")
-    if isinstance(data, dict) and "result" in data:
-        return data["result"]
+    try:
+        data = response.json()
+    except ValueError as exc:
+        body = (response.text or "").strip()
+        if len(body) > 500:
+            body = body[:500] + "..."
+        raise ValueError(f"toncenter_non_json_response status={response.status_code} body={body!r}") from exc
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, str) and error:
+            raise ValueError(error)
+        if data.get("ok") is False:
+            raise ValueError(data.get("error") or "ton_api_error")
+        if "result" in data:
+            return data["result"]
     return data
 
 
@@ -216,8 +243,132 @@ def _amount_to_nano(amount: float | None) -> int:
 
 def _wallet_from_key(deposit_key: str):
     mnemonics = deposit_key.split()
-    _, _, _, wallet = Wallets.from_mnemonics(mnemonics, WalletVersionEnum.v4r2, 0)
+    if _is_wallet_v5_version():
+        return _wallet_from_key_v5(mnemonics)
+    version = _resolve_wallet_version(mnemonics)
+    _, _, _, wallet = Wallets.from_mnemonics(mnemonics, version, 0)
     return wallet
+
+
+def _is_wallet_v5_version() -> bool:
+    value = (settings.ton_wallet_version or "").strip().lower()
+    return value in ("v5r1", "v5beta", "v5", "w5")
+
+
+def _wallet_v5_network_global_id() -> int:
+    return -3 if _is_testnet() else -239
+
+
+@dataclass
+class _WalletV5:
+    address: Address
+    address_raw: PytoniqAddress
+    private_key: bytes
+    wallet_id: int
+
+
+def _wallet_from_key_v5(mnemonics: list[str]) -> _WalletV5:
+    public_key, private_key = mnemonic_to_private_key(mnemonics)
+    wallet_id = settings.ton_wallet_id
+    if wallet_id is None:
+        wallet_id = WalletV5WalletID(
+            network_global_id=_wallet_v5_network_global_id(),
+            workchain=0,
+            subwallet_number=settings.ton_wallet_subwallet or 0,
+        ).pack()
+        data = WalletV5R1.create_data_cell(
+            public_key,
+            wc=0,
+            wallet_id=wallet_id,
+            is_signature_allowed=True,
+        )
+    else:
+        data = WalletV5R1.create_data_cell(
+            public_key,
+            wc=0,
+            wallet_id=wallet_id,
+            is_signature_allowed=True,
+        )
+    state_init = PytoniqStateInit(code=WALLET_V5_R1_CODE, data=data)
+    address_raw = PytoniqAddress((0, state_init.serialize().hash))
+    address = Address(
+        address_raw.to_str(
+            is_user_friendly=True,
+            is_url_safe=True,
+            is_bounceable=True,
+            is_test_only=_is_testnet(),
+        )
+    )
+    return _WalletV5(address=address, address_raw=address_raw, private_key=private_key, wallet_id=wallet_id)
+
+
+def _wallet_version_candidates() -> list[tuple[str, WalletVersionEnum]]:
+    candidates: list[tuple[str, WalletVersionEnum]] = []
+    for name in (
+        "v1r1",
+        "v1r2",
+        "v1r3",
+        "v2r1",
+        "v2r2",
+        "v3r1",
+        "v3r2",
+        "v4r1",
+        "v4r2",
+        "v5r1",
+        "v5beta",
+    ):
+        enum_value = getattr(WalletVersionEnum, name, None)
+        if enum_value is not None:
+            candidates.append((name, enum_value))
+    return candidates
+
+
+def _resolve_wallet_version(mnemonics: list[str]) -> WalletVersionEnum:
+    requested = (settings.ton_wallet_version or "").strip().lower()
+    candidates = _wallet_version_candidates()
+    if requested:
+        for name, enum_value in candidates:
+            if name == requested:
+                return enum_value
+        raise ValueError("ton_wallet_version_invalid")
+    detected: WalletVersionEnum | None = None
+    best_score = -1
+    for name, enum_value in candidates:
+        _, _, _, wallet = Wallets.from_mnemonics(mnemonics, enum_value, 0)
+        address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        score = 0
+        try:
+            state = _toncenter_wallet_state_v3(address)
+            if isinstance(state, dict):
+                if state.get("is_wallet"):
+                    score += 2
+                if int(state.get("seqno") or 0) > 0:
+                    score += 2
+                if int(state.get("balance") or 0) > 0:
+                    score += 3
+                if str(state.get("status") or "") == "active":
+                    score += 1
+        except Exception:
+            score = 0
+        if score == 0:
+            try:
+                info = _toncenter_get("getWalletInformation", {"address": address})
+                if isinstance(info, dict):
+                    wallet_type = str(info.get("wallet_type") or "").lower()
+                    if name in wallet_type:
+                        score += 2
+                    if int(info.get("seqno") or 0) > 0:
+                        score += 2
+                    if int(info.get("balance") or 0) > 0:
+                        score += 3
+            except Exception:
+                score = 0
+        if score > best_score:
+            best_score = score
+            detected = enum_value
+    if detected is None:
+        return WalletVersionEnum.v4r2
+    return detected
 
 
 def _wallet_seqno(address: str) -> int:
@@ -289,35 +440,78 @@ def _extract_tx_id(tx: dict) -> str | None:
     return None
 
 
+def _extract_message_hash(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    if isinstance(value, dict):
+        nested = value.get("result")
+        if nested is not None and nested is not value:
+            nested_hash = _extract_message_hash(nested)
+            if nested_hash:
+                return nested_hash
+        for key in (
+            "message_hash",
+            "message_hash_norm",
+            "transactionHash",
+            "hash",
+            "inMsgHash",
+            "in_msg_hash",
+        ):
+            raw = value.get(key)
+            if raw:
+                return str(raw)
+    return None
+
+
+def _is_transient_send_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    if any(token in text for token in ("timeout", "timed out", "temporarily", "try again", "rate limit", "too many")):
+        return True
+    if any(code in text for code in (" 429", " 500", " 502", " 503", " 504")):
+        return True
+    return False
+
+
 def _send_boc(boc: str) -> str:
-    result = None
-    try:
-        result = _toncenter_post_v3("message", {"boc": boc})
-    except Exception:
-        result = None
-    if result is not None:
-        if isinstance(result, dict):
-            message_hash = (
-                result.get("message_hash")
-                or result.get("message_hash_norm")
-                or result.get("result")
-                or result.get("transactionHash")
-                or result.get("hash")
-            )
-            if message_hash is not None:
-                return str(message_hash)
-        if isinstance(result, str):
-            return result
-        return str(result)
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            result = _toncenter_post_v3("message", {"boc": boc})
+            message_hash = _extract_message_hash(result)
+            if message_hash:
+                return message_hash
+            last_error = ValueError(f"ton_v3_send_empty_response result={result!r}")
+        except Exception as exc:
+            last_error = exc
+        if attempt < 2 and last_error is not None and _is_transient_send_error(last_error):
+            time.sleep(0.4 * (attempt + 1))
+            continue
+        break
+    v2_error: Exception | None = None
     try:
         result = _toncenter_post("sendBocReturnHash", {"boc": boc})
-    except Exception:
-        result = _toncenter_post("sendBoc", {"boc": boc})
-    if isinstance(result, str):
-        return result
-    if isinstance(result, dict):
-        return str(result.get("result") or result.get("transactionHash") or result.get("hash") or "")
-    return str(result)
+        message_hash = _extract_message_hash(result)
+        if message_hash:
+            return message_hash
+        v2_error = ValueError(f"ton_v2_send_empty_response result={result!r}")
+    except Exception as exc:
+        v2_error = exc
+        try:
+            result = _toncenter_post("sendBoc", {"boc": boc})
+            message_hash = _extract_message_hash(result)
+            if message_hash:
+                return message_hash
+            v2_error = ValueError(f"ton_v2_send_empty_response result={result!r}")
+        except Exception as exc2:
+            v2_error = exc2
+    if v2_error is not None and last_error is not None:
+        raise ValueError(f"ton_send_failed v3_error={last_error} v2_error={v2_error}") from v2_error
+    if last_error is not None:
+        raise ValueError(f"ton_send_failed v3_error={last_error}") from last_error
+    raise ValueError("ton_send_failed")
 
 
 def derive_deposit_key(deal_id: int) -> str:
@@ -369,6 +563,13 @@ def find_incoming_tx(
 
 
 def send_payout(deposit_key: str, payout_address: str, amount: float | None) -> str:
+    if _is_wallet_v5_version():
+        wallet = _wallet_from_key(deposit_key)
+        wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        seqno = _wallet_seqno(wallet_address)
+        amount_nano = _resolve_send_amount_nano(wallet_address, amount)
+        boc = _create_transfer_boc_v5(wallet, payout_address, amount_nano, seqno)
+        return _send_boc(boc)
     wallet = _wallet_from_key(deposit_key)
     wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
     seqno = _wallet_seqno(wallet_address)
@@ -379,6 +580,13 @@ def send_payout(deposit_key: str, payout_address: str, amount: float | None) -> 
 
 
 def send_refund(deposit_key: str, refund_address: str, amount: float | None) -> str:
+    if _is_wallet_v5_version():
+        wallet = _wallet_from_key(deposit_key)
+        wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        seqno = _wallet_seqno(wallet_address)
+        amount_nano = _resolve_send_amount_nano(wallet_address, amount)
+        boc = _create_transfer_boc_v5(wallet, refund_address, amount_nano, seqno)
+        return _send_boc(boc)
     wallet = _wallet_from_key(deposit_key)
     wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
     seqno = _wallet_seqno(wallet_address)
@@ -386,3 +594,23 @@ def send_refund(deposit_key: str, refund_address: str, amount: float | None) -> 
     query = wallet.create_transfer_message(refund_address, amount_nano, seqno)
     boc = bytes_to_b64str(query["message"].to_boc(False))
     return _send_boc(boc)
+
+
+def _create_transfer_boc_v5(wallet: _WalletV5, destination: str, amount_nano: int, seqno: int) -> str:
+    dest = PytoniqAddress(destination)
+    msg = WalletV5R1.create_wallet_internal_message(destination=dest, value=amount_nano)
+    op_code = 0x7369676e
+    signing_message = begin_cell().store_uint(op_code, 32)
+    signing_message.store_uint(wallet.wallet_id, 32)
+    if seqno == 0:
+        signing_message.store_uint(2**32 - 1, 32)
+    else:
+        signing_message.store_uint(int(time.time()) + 60, 32)
+    signing_message.store_uint(seqno, 32)
+    signing_message.store_cell(WalletV5R1.pack_actions([msg]))
+    signing_message = signing_message.end_cell()
+    signature = sign_message(signing_message.hash, wallet.private_key)
+    transfer = Builder().store_cell(signing_message).store_bytes(signature).end_cell()
+    ext = WalletV5R1.create_external_msg(dest=wallet.address_raw, body=transfer)
+    boc = ext.serialize().to_boc()
+    return base64.b64encode(boc).decode()
