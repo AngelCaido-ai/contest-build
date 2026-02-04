@@ -41,9 +41,16 @@ class BotRequestCreate(BaseModel):
 
 class BotDealCreate(BaseModel):
     owner_tg_user_id: int
-    request_id: int
-    channel_id: int
+    listing_id: int | None = None
+    request_id: int | None = None
+    channel_id: int | None = None
     price: float | None = None
     format: str | None = None
+    brief: str | None = None
     publish_at: datetime | None = None
     verification_window: int | None = None
+
+
+class BotEscrowDepositRequest(BaseModel):
+    actor_tg_user_id: int
+    expected_amount: float | None = None

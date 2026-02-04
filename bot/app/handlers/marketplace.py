@@ -1,4 +1,5 @@
-from aiogram import F, Router
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -16,6 +17,7 @@ MENU_DEALS = "menu:deals"
 MENU_CREATE_LISTING = "menu:create_listing"
 MENU_CREATE_REQUEST = "menu:create_request"
 LISTING_PREFIX = "listing:"
+LISTING_RESPOND_PREFIX = "listing_respond:"
 REQUEST_PREFIX = "request:"
 LISTING_CHANNEL_PREFIX = "listing_channel:"
 LISTING_CHANNEL_MANUAL = "listing_channel_manual"
@@ -27,6 +29,13 @@ class ListingCreateState(StatesGroup):
     channel_id = State()
     price_usd = State()
     format = State()
+
+
+class ListingRespondState(StatesGroup):
+    listing_id = State()
+    price_usd = State()
+    format = State()
+    brief = State()
 
 
 class RequestCreateState(StatesGroup):
@@ -44,6 +53,144 @@ def _is_number(value: str) -> bool:
 
 def _is_skip(value: str) -> bool:
     return value.lower() in {"skip", "-"}
+
+
+def _strip_quotes(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return value
+    if value[0] in {'"', "'", "“", "”"} and len(value) > 1 and value[-1] == value[0]:
+        value = value[1:-1].strip()
+    return value
+
+
+def _is_int(value: str) -> bool:
+    if not value:
+        return False
+    if value[0] == "-":
+        return value[1:].isdigit()
+    return value.isdigit()
+
+
+def _extract_channel_ref(value: str) -> str:
+    value = _strip_quotes(value)
+    if not value:
+        return value
+    if _is_int(value):
+        return value
+    raw = value
+    for prefix in ("https://", "http://"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix) :]
+            break
+    for domain in ("t.me/", "telegram.me/"):
+        if raw.startswith(domain):
+            raw = raw[len(domain) :]
+            break
+    raw = raw.lstrip("/")
+    raw = raw.split("?", 1)[0]
+    if raw.startswith("c/"):
+        parts = raw.split("/")
+        if len(parts) >= 2 and parts[1].isdigit():
+            return f"-100{parts[1]}"
+    if "/" in raw:
+        raw = raw.split("/", 1)[0]
+    if raw.startswith("@"):
+        raw = raw[1:]
+    return raw.strip()
+
+
+def _find_channel(
+    items: list[dict],
+    *,
+    channel_id: int | None = None,
+    tg_chat_id: int | None = None,
+    username: str | None = None,
+) -> dict | None:
+    username_norm = (username or "").lower()
+    for item in items:
+        if channel_id is not None and item.get("id") == channel_id:
+            return item
+        if tg_chat_id is not None and item.get("tg_chat_id") == tg_chat_id:
+            return item
+        if username_norm and (item.get("username") or "").lower() == username_norm:
+            return item
+    return None
+
+
+async def _link_channel(message: Message, bot: Bot, chat) -> int | None:
+    try:
+        user_member = await bot.get_chat_member(chat.id, message.from_user.id)
+        bot_member = await bot.get_chat_member(chat.id, (await bot.me()).id)
+    except TelegramBadRequest:
+        await message.answer("Cannot access member list. Make bot admin or use a public channel.")
+        return None
+    user_admin = user_member.status in {"administrator", "creator"}
+    bot_admin = bot_member.status in {"administrator", "creator"}
+    if not user_admin:
+        await message.answer("You are not channel admin.")
+        return None
+    payload = {
+        "owner_tg_user_id": message.from_user.id,
+        "tg_chat_id": chat.id,
+        "username": chat.username,
+        "title": chat.title,
+        "bot_admin_status": bot_admin,
+        "rights_snapshot": {
+            "user_status": user_member.status,
+            "bot_status": bot_member.status,
+        },
+    }
+    try:
+        result = api_client.create_channel(payload)
+    except Exception as exc:
+        await message.answer(f"Failed to link channel: {exc}")
+        return None
+    channel_id = result.get("channel_id")
+    if channel_id is None:
+        await message.answer("Failed to link channel.")
+        return None
+    return int(channel_id)
+
+
+async def _resolve_channel_id(message: Message, bot: Bot, value: str) -> int | None:
+    ref = _extract_channel_ref(value)
+    if not ref:
+        await message.answer("Enter @username, t.me link, or channel id.")
+        return None
+    if _is_int(ref):
+        number = int(ref)
+        try:
+            items = api_client.list_channels(message.from_user.id)
+        except Exception:
+            items = []
+        if number > 0:
+            if _find_channel(items, channel_id=number):
+                return number
+            await message.answer("Channel not found. Send @username or t.me link.")
+            return None
+        match = _find_channel(items, tg_chat_id=number)
+        if match:
+            return match.get("id")
+        try:
+            chat = await bot.get_chat(number)
+        except Exception:
+            await message.answer("Channel not found. Make sure the bot is an admin.")
+            return None
+        return await _link_channel(message, bot, chat)
+    try:
+        items = api_client.list_channels(message.from_user.id)
+    except Exception:
+        items = []
+    match = _find_channel(items, username=ref)
+    if match:
+        return match.get("id")
+    try:
+        chat = await bot.get_chat(f"@{ref}")
+    except Exception:
+        await message.answer("Channel not found. Send @username or a valid t.me link.")
+        return None
+    return await _link_channel(message, bot, chat)
 
 
 class CommandTextFilter(BaseFilter):
@@ -127,7 +274,7 @@ async def _prompt_listing_channel_select(message: Message, tg_user_id: int) -> N
 
 async def _prompt_listing_channel_manual(message: Message) -> None:
     await message.answer(
-        "Enter channel id.",
+        "Введите @username, ссылку t.me/... или числовой id канала (-100...).",
         reply_markup=_flow_nav_keyboard(f"{FLOW_BACK_PREFIX}listing:menu", f"{FLOW_CANCEL_PREFIX}listing"),
     )
 
@@ -143,6 +290,27 @@ async def _prompt_listing_format(message: Message) -> None:
     await message.answer(
         "Enter format or 'skip'.",
         reply_markup=_flow_nav_keyboard(f"{FLOW_BACK_PREFIX}listing:price_usd", f"{FLOW_CANCEL_PREFIX}listing"),
+    )
+
+
+async def _prompt_listing_respond_price(message: Message) -> None:
+    await message.answer(
+        "Enter price in USD or 'skip' to use listing price.",
+        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
+    )
+
+
+async def _prompt_listing_respond_format(message: Message) -> None:
+    await message.answer(
+        "Enter format or 'skip' to use listing format.",
+        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
+    )
+
+
+async def _prompt_listing_respond_brief(message: Message) -> None:
+    await message.answer(
+        "Enter brief or 'skip'.",
+        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
     )
 
 
@@ -201,9 +369,10 @@ async def _send_requests(message: Message) -> None:
     await message.answer("\n".join(lines), reply_markup=_items_keyboard(items, REQUEST_PREFIX))
 
 
-async def _send_deals(message: Message) -> None:
+async def _send_deals(message: Message, tg_user_id: int | None = None) -> None:
     try:
-        items = api_client.list_deals(message.from_user.id)
+        user_id = tg_user_id if tg_user_id is not None else message.from_user.id
+        items = api_client.list_deals(user_id)
     except Exception as exc:
         await message.answer(f"Failed to load deals: {exc}")
         return
@@ -330,13 +499,15 @@ async def create_request(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("create_listing"))
-async def create_listing(message: Message, state: FSMContext) -> None:
+async def create_listing(message: Message, state: FSMContext, bot: Bot) -> None:
     parts = (message.text or "").split()
     if len(parts) < 2:
         await state.set_state(ListingCreateState.channel_id)
         await _prompt_listing_channel_select(message, message.from_user.id)
         return
-    channel_id = int(parts[1])
+    channel_id = await _resolve_channel_id(message, bot, parts[1])
+    if channel_id is None:
+        return
     price_usd = float(parts[2]) if len(parts) > 2 else None
     format_value = parts[3] if len(parts) > 3 else "post"
     payload = {
@@ -376,7 +547,7 @@ async def menu_requests(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == MENU_DEALS)
 async def menu_deals(callback: CallbackQuery) -> None:
     if callback.message:
-        await _send_deals(callback.message)
+        await _send_deals(callback.message, callback.from_user.id)
     await callback.answer()
 
 
@@ -467,6 +638,12 @@ async def listing_details(callback: CallbackQuery) -> None:
         await callback.message.answer(f"Failed to load listing: {exc}")
         await callback.answer()
         return
+    is_own = False
+    try:
+        channels = api_client.list_channels(callback.from_user.id)
+        is_own = any(item.get("id") == listing.get("channel_id") for item in channels)
+    except Exception:
+        is_own = False
     text = "\n".join(
         [
             f"Listing #{listing.get('id')}",
@@ -477,11 +654,50 @@ async def listing_details(callback: CallbackQuery) -> None:
             f"active: {listing.get('active')}",
         ]
     )
+    if is_own:
+        text = f"{text}\nYou cannot respond to your own listing."
     builder = InlineKeyboardBuilder()
+    if not is_own:
+        builder.button(text="Respond", callback_data=f"{LISTING_RESPOND_PREFIX}{listing_id}")
     builder.button(text="Back to listings", callback_data=MENU_LISTINGS)
     builder.button(text="Back to menu", callback_data=MENU_MAIN)
-    builder.adjust(1, 1)
+    if is_own:
+        builder.adjust(1, 1)
+    else:
+        builder.adjust(1, 1, 1)
     await callback.message.answer(text, reply_markup=builder.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(LISTING_RESPOND_PREFIX))
+async def listing_respond_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    listing_id = int(callback.data.split(":", 1)[1])
+    try:
+        listing = api_client.get_listing(listing_id)
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load listing: {exc}")
+        await callback.answer()
+        return
+    if not listing.get("active", True):
+        await callback.message.answer("Listing is inactive.", reply_markup=_main_menu_keyboard())
+        await callback.answer()
+        return
+    try:
+        channels = api_client.list_channels(callback.from_user.id)
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load channels: {exc}")
+        await callback.answer()
+        return
+    if any(item.get("id") == listing.get("channel_id") for item in channels):
+        await callback.message.answer("You cannot respond to your own listing.", reply_markup=_main_menu_keyboard())
+        await callback.answer()
+        return
+    await state.set_state(ListingRespondState.price_usd)
+    await state.update_data(listing_id=listing_id)
+    await _prompt_listing_respond_price(callback.message)
     await callback.answer()
 
 
@@ -518,12 +734,12 @@ async def request_details(callback: CallbackQuery) -> None:
 
 
 @router.message(ListingCreateState.channel_id)
-async def listing_channel_id(message: Message, state: FSMContext) -> None:
+async def listing_channel_id(message: Message, state: FSMContext, bot: Bot) -> None:
     value = (message.text or "").strip()
-    if not value.isdigit():
-        await message.answer("Channel id must be a number.")
+    channel_id = await _resolve_channel_id(message, bot, value)
+    if channel_id is None:
         return
-    await state.update_data(channel_id=int(value))
+    await state.update_data(channel_id=channel_id)
     await state.set_state(ListingCreateState.price_usd)
     await _prompt_listing_price(message)
 
@@ -558,6 +774,71 @@ async def listing_format(message: Message, state: FSMContext) -> None:
         await message.answer("Listing created", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create listing: {exc}")
+    await state.clear()
+
+
+@router.message(ListingRespondState.price_usd)
+async def listing_respond_price(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    if _is_skip(value):
+        await state.update_data(price_usd=None)
+    elif _is_number(value):
+        await state.update_data(price_usd=float(value))
+    else:
+        await message.answer("Price must be a number or 'skip'.")
+        return
+    await state.set_state(ListingRespondState.format)
+    await _prompt_listing_respond_format(message)
+
+
+@router.message(ListingRespondState.format)
+async def listing_respond_format(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    format_value = None if _is_skip(value) else value
+    await state.update_data(format=format_value)
+    await state.set_state(ListingRespondState.brief)
+    await _prompt_listing_respond_brief(message)
+
+
+@router.message(ListingRespondState.brief)
+async def listing_respond_brief(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    brief_value = None if _is_skip(value) else value
+    data = await state.get_data()
+    listing_id = data.get("listing_id")
+    if listing_id is None:
+        await message.answer("Listing not found.", reply_markup=_main_menu_keyboard())
+        await state.clear()
+        return
+    try:
+        listing = api_client.get_listing(int(listing_id))
+    except Exception as exc:
+        await message.answer(f"Failed to load listing: {exc}")
+        await state.clear()
+        return
+    price = data.get("price_usd")
+    if price is None:
+        price = listing.get("price_usd")
+    format_value = data.get("format") or listing.get("format") or "post"
+    payload = {
+        "owner_tg_user_id": message.from_user.id,
+        "listing_id": int(listing_id),
+        "price": price,
+        "format": format_value,
+        "brief": brief_value,
+    }
+    try:
+        deal = api_client.create_deal(payload)
+        await message.answer(f"Deal created: #{deal.get('id')}")
+        try:
+            from bot.app.handlers.deals import _send_deal_details
+        except Exception:
+            await message.answer("Use /deal to open the deal.", reply_markup=_main_menu_keyboard())
+            await state.clear()
+            return
+        await _send_deal_details(message, int(deal.get("id")))
+    except Exception as exc:
+        await message.answer(f"Failed to create deal: {exc}")
     await state.clear()
 
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -17,6 +17,7 @@ class Deal(Base):
     channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id"), nullable=False)
     price: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     format: Mapped[str | None] = mapped_column(String, nullable=True)
+    brief: Mapped[str | None] = mapped_column(Text, nullable=True)
     publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     verification_window: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[DealStatus] = mapped_column(Enum(DealStatus), default=DealStatus.NEGOTIATING, nullable=False)

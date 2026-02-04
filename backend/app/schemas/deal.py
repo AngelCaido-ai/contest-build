@@ -11,11 +11,13 @@ class DealCreate(BaseModel):
     channel_id: int | None = None
     price: float | None = None
     format: str | None = None
+    brief: str | None = None
     publish_at: datetime | None = None
     verification_window: int | None = None
 
 
 class DealTermsUpdate(BaseModel):
+    actor_tg_user_id: int | None = None
     price: float | None = None
     format: str | None = None
     publish_at: datetime | None = None
@@ -23,6 +25,7 @@ class DealTermsUpdate(BaseModel):
 
 
 class DealStatusUpdate(BaseModel):
+    actor_tg_user_id: int | None = None
     status: DealStatus
 
 
@@ -34,6 +37,7 @@ class DealOut(BaseModel):
     channel_id: int
     price: float | None
     format: str | None
+    brief: str | None
     publish_at: datetime | None
     verification_window: int | None
     status: DealStatus

@@ -23,10 +23,10 @@ def update_terms(deal_id: int, payload: dict) -> dict:
     return resp.json()
 
 
-def update_status(deal_id: int, status: str) -> dict:
+def update_status(deal_id: int, payload: dict) -> dict:
     resp = requests.post(
         _url(f"/bot/deals/{deal_id}/status"),
-        json={"status": status},
+        json=payload,
         headers=_headers(),
     )
     resp.raise_for_status()
@@ -39,12 +39,18 @@ def create_creative(deal_id: int, payload: dict) -> dict:
     return resp.json()
 
 
-def update_creative_status(deal_id: int, status: str) -> dict:
+def update_creative_status(deal_id: int, payload: dict) -> dict:
     resp = requests.post(
         _url(f"/bot/deals/{deal_id}/creative/status"),
-        json={"status": status},
+        json=payload,
         headers=_headers(),
     )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_deposit(deal_id: int, payload: dict) -> dict:
+    resp = requests.post(_url(f"/bot/deals/{deal_id}/deposit"), json=payload, headers=_headers())
     resp.raise_for_status()
     return resp.json()
 

@@ -10,7 +10,7 @@ from app.models.deal import Deal
 from app.models.enums import DealStatus
 from app.services.deal_service import log_event, set_status
 from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments
-from app.services.telegram_service import copy_message, send_message
+from app.services.telegram_service import copy_message, send_media, send_message
 
 
 def check_payment_timeouts() -> None:
@@ -51,9 +51,11 @@ def process_scheduled_posts() -> None:
                 .order_by(Creative.version.desc())
                 .first()
             )
-            if not channel or not creative or not creative.text:
+            if not channel or not creative or (not creative.text and not creative.media_file_ids):
                 continue
-            message_id = send_message(channel.tg_chat_id, creative.text)
+            message_id = send_media(channel.tg_chat_id, creative.text, creative.media_file_ids)
+            if not message_id and creative.text:
+                message_id = send_message(channel.tg_chat_id, creative.text)
             if not message_id:
                 continue
             deal.posted_message_id = message_id

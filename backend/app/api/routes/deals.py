@@ -49,6 +49,7 @@ def create_deal(
         channel_id=channel_id,
         price=payload.price,
         format=payload.format,
+        brief=payload.brief,
         publish_at=payload.publish_at,
         verification_window=payload.verification_window,
         status=DealStatus.NEGOTIATING,
