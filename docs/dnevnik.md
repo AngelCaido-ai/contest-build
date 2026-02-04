@@ -30,3 +30,15 @@
 ### docs
 - Added this change log file.
 - Documented one-command Docker startup in README.
+
+## 2026-02-04
+
+### backend
+- Added bot auth endpoint for JWT without Mini App and API refund flow test.
+- Fixed refund API test import path for running from repo root.
+- Strengthened refund API test assertions and send_refund call checks.
+- Added testnet-gated refund API integration test.
+- Added logging and explicit skip reasons in testnet refund test.
+- Added explicit source mnemonics support and address mismatch warning in testnet refund test.
+- Added non-bounceable deposit address handling and source balance/seqno logs for testnet refund test.
+- Added release API tests (mock and testnet) with logging.

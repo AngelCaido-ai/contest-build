@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_bot_secret, get_db
 from app.core.security import create_access_token, verify_init_data
 from app.models.user import User
-from app.schemas.auth import AuthRequest, AuthResponse
+from app.schemas.auth import AuthRequest, AuthResponse, BotAuthRequest
 from app.schemas.user import UserOut
 
 router = APIRouter()
@@ -21,6 +21,18 @@ def auth_miniapp(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthRes
     user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
     if not user:
         user = User(tg_user_id=tg_user_id, roles=payload.roles or ["advertiser"])
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    token = create_access_token(user.id)
+    return AuthResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/bot", response_model=AuthResponse, dependencies=[Depends(get_bot_secret)])
+def auth_bot(payload: BotAuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    user = db.query(User).filter(User.tg_user_id == payload.tg_user_id).first()
+    if not user:
+        user = User(tg_user_id=payload.tg_user_id, roles=payload.roles or ["advertiser"])
         db.add(user)
         db.commit()
         db.refresh(user)
