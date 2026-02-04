@@ -374,7 +374,7 @@ async def deal_payment_details(callback: CallbackQuery) -> None:
         f"comment: {comment}",
         f"amount: {amount}",
     ]
-    lines.append("If you use Telegram Wallet, paste address/comment manually.")
+    lines.append("Telegram Wallet does not support prefilled payments.")
     lines.append("After payment, wait for auto-detection or set status to FUNDED.")
     builder = InlineKeyboardBuilder()
     if address:
@@ -396,7 +396,6 @@ async def deal_payment_details(callback: CallbackQuery) -> None:
         if tk_params:
             tonkeeper_url = f"{tonkeeper_url}?{urlencode(tk_params)}"
         builder.button(text="Open Tonkeeper", url=tonkeeper_url)
-        builder.button(text="Open Telegram Wallet", url="https://t.me/wallet/start?startapp=tonspace_main")
     builder.button(text="Open deal", callback_data=f"{DEAL_PREFIX}{deal_id}")
     builder.adjust(1)
     await callback.message.answer("\n".join(lines), reply_markup=builder.as_markup())
