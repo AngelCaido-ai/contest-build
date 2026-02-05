@@ -24,6 +24,11 @@ class DealTermsUpdate(BaseModel):
     verification_window: int | None = None
 
 
+class DealPublishAtUpdate(BaseModel):
+    actor_tg_user_id: int | None = None
+    publish_at: datetime | None = None
+
+
 class DealStatusUpdate(BaseModel):
     actor_tg_user_id: int | None = None
     status: DealStatus

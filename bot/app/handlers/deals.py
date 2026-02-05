@@ -32,6 +32,9 @@ DEAL_PAYMENT_PREFIX = "deal_payment:"
 DEAL_CREATIVE_PREFIX = "deal_creative:"
 DEAL_CREATIVE_BACK_PREFIX = "deal_creative_back:"
 DEAL_CREATIVE_CANCEL_PREFIX = "deal_creative_cancel:"
+DEAL_PUBLISH_AT_PREFIX = "deal_publish_at:"
+DEAL_PUBLISH_AT_BACK_PREFIX = "deal_publish_at_back:"
+DEAL_PUBLISH_AT_CANCEL_PREFIX = "deal_publish_at_cancel:"
 DEAL_CREATIVE_STATUS_PREFIX = "deal_creative_status:"
 DEAL_CREATIVE_STATUS_SET_PREFIX = "deal_creative_status_set:"
 DEAL_CREATIVE_STATUS_BACK_PREFIX = "deal_creative_status_back:"
@@ -137,6 +140,10 @@ class DealTermsState(StatesGroup):
 
 class DealStatusState(StatesGroup):
     status = State()
+
+
+class DealPublishAtState(StatesGroup):
+    publish_at = State()
 
 
 class CreativeState(StatesGroup):
@@ -300,6 +307,7 @@ async def _send_creative_preview(message: Message, creative: dict) -> None:
 def _deal_actions_keyboard(deal: dict, role: str, creative_version: int | None = None):
     deal_id = deal.get("id")
     status = (deal.get("status") or "").upper()
+    publish_at = deal.get("publish_at")
     allowed_statuses = _allowed_transitions_for_role(status, role)
     builder = InlineKeyboardBuilder()
     if role == ROLE_OWNER and status in {"NEGOTIATING", "TERMS_LOCKED"}:
@@ -310,6 +318,12 @@ def _deal_actions_keyboard(deal: dict, role: str, creative_version: int | None =
         builder.button(text="Create creative", callback_data=f"{DEAL_CREATIVE_PREFIX}{deal_id}")
     if role == ROLE_ADVERTISER and status in {"CREATIVE_REVIEW"}:
         builder.button(text="Creative status", callback_data=f"{DEAL_CREATIVE_STATUS_PREFIX}{deal_id}")
+    if (
+        role == ROLE_OWNER
+        and not publish_at
+        and status not in {"NEGOTIATING", "TERMS_LOCKED", "POSTED", "VERIFYING", "RELEASED", "REFUNDED", "CANCELED"}
+    ):
+        builder.button(text="Set publish time", callback_data=f"{DEAL_PUBLISH_AT_PREFIX}{deal_id}")
     view_statuses = {
         "CREATIVE_REVIEW",
         "CREATIVE_DRAFT",
@@ -379,6 +393,16 @@ async def _prompt_terms_verification_window(message: Message, deal_id: int) -> N
 
 async def _prompt_terms_format(message: Message, deal_id: int) -> None:
     await message.answer("Enter format or 'skip'.", reply_markup=_terms_keyboard(deal_id, "verification_window"))
+
+
+async def _prompt_publish_at_only(message: Message, deal_id: int) -> None:
+    await message.answer(
+        "Enter publish_at in ISO format.",
+        reply_markup=_nav_keyboard(
+            f"{DEAL_PUBLISH_AT_BACK_PREFIX}{deal_id}",
+            f"{DEAL_PUBLISH_AT_CANCEL_PREFIX}{deal_id}",
+        ),
+    )
 
 
 async def _prompt_creative_status_comment(message: Message, deal_id: int) -> None:
@@ -590,6 +614,62 @@ async def deal_terms_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith(DEAL_PUBLISH_AT_PREFIX))
+async def deal_publish_at_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    try:
+        deal = api_client.get_deal(deal_id)
+    except Exception as exc:
+        if callback.message:
+            await callback.message.answer(f"Failed to load deal: {exc}")
+        await callback.answer()
+        return
+    role = _resolve_deal_role(callback.from_user.id, deal)
+    if role != ROLE_OWNER:
+        if callback.message:
+            await callback.message.answer("Only channel owner can set publish time.")
+        await callback.answer()
+        return
+    status = (deal.get("status") or "").upper()
+    if status in {"POSTED", "VERIFYING", "RELEASED", "REFUNDED", "CANCELED"}:
+        if callback.message:
+            await callback.message.answer("Publish time cannot be updated for this deal.")
+        await callback.answer()
+        return
+    await state.update_data(deal_id=deal_id)
+    await state.set_state(DealPublishAtState.publish_at)
+    if callback.message:
+        await _prompt_publish_at_only(callback.message, deal_id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_PUBLISH_AT_BACK_PREFIX))
+async def deal_publish_at_back(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    if await state.get_state():
+        await state.clear()
+    await _send_deal_details(callback.message, deal_id, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_PUBLISH_AT_CANCEL_PREFIX))
+async def deal_publish_at_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    if await state.get_state():
+        await state.clear()
+    await _send_deal_details(callback.message, deal_id, callback.from_user.id)
+    await callback.answer()
+
+
 @router.message(DealTermsState.price)
 async def deal_terms_price(message: Message, state: FSMContext) -> None:
     value = (message.text or "").strip()
@@ -653,6 +733,28 @@ async def deal_terms_format(message: Message, state: FSMContext) -> None:
         await message.answer("Terms updated")
     except Exception as exc:
         await message.answer(f"Failed to update terms: {exc}")
+    await state.clear()
+    await _send_deal_details(message, data["deal_id"])
+
+
+@router.message(DealPublishAtState.publish_at)
+async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    try:
+        publish_at = _normalize_datetime(value)
+    except ValueError:
+        await message.answer("Invalid datetime. Use ISO format.")
+        return
+    if not publish_at:
+        await message.answer("Publish_at is required.")
+        return
+    data = await state.get_data()
+    payload = {"actor_tg_user_id": message.from_user.id, "publish_at": publish_at}
+    try:
+        api_client.update_publish_at(data["deal_id"], payload)
+        await message.answer("Publish time updated")
+    except Exception as exc:
+        await message.answer(f"Failed to update publish time: {exc}")
     await state.clear()
     await _send_deal_details(message, data["deal_id"])
 

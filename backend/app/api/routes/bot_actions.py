@@ -23,7 +23,7 @@ from app.schemas.bot import (
 )
 from app.schemas.channel import ChannelOut
 from app.schemas.creative import CreativeCreate, CreativeOut, CreativeStatusUpdate
-from app.schemas.deal import DealOut, DealStatusUpdate, DealTermsUpdate
+from app.schemas.deal import DealOut, DealPublishAtUpdate, DealStatusUpdate, DealTermsUpdate
 from app.schemas.escrow import EscrowOut
 from app.schemas.event import DealEventCreate, DealEventOut
 from app.schemas.listing import ListingOut
@@ -357,6 +357,38 @@ def bot_update_terms(
     db.commit()
     db.refresh(deal)
     _notify_deal_parties(db, deal, f"Deal #{deal.id}: terms locked.")
+    return DealOut.model_validate(deal)
+
+
+@router.post("/deals/{deal_id}/publish_at", response_model=DealOut, dependencies=[Depends(get_bot_secret)])
+def bot_update_publish_at(
+    deal_id: int,
+    payload: DealPublishAtUpdate,
+    db: Session = Depends(get_db),
+) -> DealOut:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if not payload.actor_tg_user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    role = _get_deal_role(db, deal, payload.actor_tg_user_id)
+    if role != ROLE_OWNER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if deal.status in {
+        DealStatus.POSTED,
+        DealStatus.VERIFYING,
+        DealStatus.RELEASED,
+        DealStatus.REFUNDED,
+        DealStatus.CANCELED,
+    }:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    if payload.publish_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="publish_at is required")
+    deal.publish_at = payload.publish_at
+    log_event(db, deal.id, "PUBLISH_AT_UPDATED", {"publish_at": payload.publish_at.isoformat()})
+    db.commit()
+    db.refresh(deal)
+    _notify_deal_parties(db, deal, f"Deal #{deal.id}: publish_at -> {payload.publish_at.isoformat()}.")
     return DealOut.model_validate(deal)
 
 
