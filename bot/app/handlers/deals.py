@@ -361,6 +361,7 @@ def _deal_text(deal: dict, role: str) -> str:
         f"brief: {deal.get('brief')}",
         f"publish_at: {deal.get('publish_at')}",
         f"verification_window: {deal.get('verification_window')}",
+        f"posted_message_id: {deal.get('posted_message_id')}",
         f"tampered: {deal.get('tampered')}",
         f"deleted: {deal.get('deleted')}",
     ]
@@ -384,11 +385,17 @@ async def _prompt_terms_price(message: Message, deal_id: int) -> None:
 
 
 async def _prompt_terms_publish_at(message: Message, deal_id: int) -> None:
-    await message.answer("Enter publish_at in ISO format.", reply_markup=_terms_keyboard(deal_id, "price"))
+    await message.answer(
+        "Введите время публикации в ISO с часовым поясом. Пример: 2026-02-05T18:30:00+03:00.",
+        reply_markup=_terms_keyboard(deal_id, "price"),
+    )
 
 
 async def _prompt_terms_verification_window(message: Message, deal_id: int) -> None:
-    await message.answer("Enter verification window in minutes.", reply_markup=_terms_keyboard(deal_id, "publish_at"))
+    await message.answer(
+        "Введите, сколько времени пост должен быть доступен, в минутах. Примеры: 480 (8 часов), 1440 (24 часа).",
+        reply_markup=_terms_keyboard(deal_id, "publish_at"),
+    )
 
 
 async def _prompt_terms_format(message: Message, deal_id: int) -> None:
@@ -397,7 +404,7 @@ async def _prompt_terms_format(message: Message, deal_id: int) -> None:
 
 async def _prompt_publish_at_only(message: Message, deal_id: int) -> None:
     await message.answer(
-        "Enter publish_at in ISO format.",
+        "Введите время публикации в ISO с часовым поясом. Пример: 2026-02-05T18:30:00+03:00.",
         reply_markup=_nav_keyboard(
             f"{DEAL_PUBLISH_AT_BACK_PREFIX}{deal_id}",
             f"{DEAL_PUBLISH_AT_CANCEL_PREFIX}{deal_id}",
@@ -417,7 +424,7 @@ async def _prompt_creative_status_comment(message: Message, deal_id: int) -> Non
 
 async def _prompt_creative_status_publish_at(message: Message, deal_id: int) -> None:
     await message.answer(
-        "Enter publish_at in ISO format.",
+        "Введите время публикации в ISO с часовым поясом. Пример: 2026-02-05T18:30:00+03:00.",
         reply_markup=_nav_keyboard(
             f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}",
             f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}",
@@ -507,6 +514,7 @@ async def deal_payment_details(callback: CallbackQuery) -> None:
     address = payment.get("deposit_address")
     comment = payment.get("deposit_comment")
     amount = payment.get("expected_amount")
+    deal_price = deal.get("price")
     amount_nano = None
     if amount is not None:
         try:
@@ -519,6 +527,12 @@ async def deal_payment_details(callback: CallbackQuery) -> None:
         f"comment: {comment}",
         f"amount: {amount}",
     ]
+    if amount is not None and deal_price is not None:
+        try:
+            if Decimal(str(amount)) > Decimal(str(deal_price)):
+                lines.append("amount includes reserve for fees.")
+        except (InvalidOperation, ValueError):
+            pass
     lines.append("Telegram Wallet does not support prefilled payments.")
     lines.append("After payment, wait for auto-detection or set status to FUNDED.")
     builder = InlineKeyboardBuilder()
@@ -691,10 +705,10 @@ async def deal_terms_publish_at(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Invalid datetime. Use ISO format.")
+        await message.answer("Неверный формат даты. Пример: 2026-02-05T18:30:00+03:00.")
         return
     if not publish_at:
-        await message.answer("Publish_at is required.")
+        await message.answer("Время публикации обязательно.")
         return
     await state.update_data(publish_at=publish_at)
     await state.set_state(DealTermsState.verification_window)
@@ -707,7 +721,7 @@ async def deal_terms_publish_at(message: Message, state: FSMContext) -> None:
 async def deal_terms_verification_window(message: Message, state: FSMContext) -> None:
     value = (message.text or "").strip()
     if not value.isdigit():
-        await message.answer("Verification window must be a number.")
+        await message.answer("Длительность должна быть числом (в минутах).")
         return
     await state.update_data(verification_window=int(value))
     await state.set_state(DealTermsState.format)
@@ -743,10 +757,10 @@ async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Invalid datetime. Use ISO format.")
+        await message.answer("Неверный формат даты. Пример: 2026-02-05T18:30:00+03:00.")
         return
     if not publish_at:
-        await message.answer("Publish_at is required.")
+        await message.answer("Время публикации обязательно.")
         return
     data = await state.get_data()
     payload = {"actor_tg_user_id": message.from_user.id, "publish_at": publish_at}
@@ -1123,10 +1137,10 @@ async def deal_creative_status_publish_at(message: Message, state: FSMContext) -
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Invalid datetime. Use ISO format.")
+        await message.answer("Неверный формат даты. Пример: 2026-02-05T18:30:00+03:00.")
         return
     if not publish_at:
-        await message.answer("Publish_at is required.")
+        await message.answer("Время публикации обязательно.")
         return
     data = await state.get_data()
     deal_id = data["deal_id"]
@@ -1190,7 +1204,9 @@ async def set_terms(message: Message, state: FSMContext) -> None:
         await state.clear()
     parts = (message.text or "").split()
     if len(parts) < 5:
-        await message.answer("Usage: /terms DEAL_ID PRICE PUBLISH_AT ISO VERIFICATION_MINUTES [FORMAT]")
+        await message.answer(
+            "Использование: /terms DEAL_ID PRICE PUBLISH_AT_ISO VERIFICATION_MINUTES [FORMAT]"
+        )
         return
     deal_id = int(parts[1])
     price = float(parts[2])
@@ -1288,15 +1304,17 @@ async def creative_status(message: Message, state: FSMContext) -> None:
             return
         if not publish_at:
             if not extra:
-                await message.answer("publish_at required. Usage: /creative_status DEAL_ID APPROVED PUBLISH_AT")
+                await message.answer(
+                    "publish_at обязателен. Пример: /creative_status DEAL_ID APPROVED 2026-02-05T18:30:00+03:00"
+                )
                 return
             try:
                 publish_at = _normalize_datetime(extra)
             except ValueError:
-                await message.answer("Invalid datetime. Use ISO format.")
+                await message.answer("Неверный формат даты. Пример: 2026-02-05T18:30:00+03:00.")
                 return
             if not publish_at:
-                await message.answer("Publish_at is required.")
+                await message.answer("Время публикации обязательно.")
                 return
             payload["publish_at"] = publish_at
     try:

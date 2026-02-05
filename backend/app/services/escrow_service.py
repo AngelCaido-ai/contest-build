@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.deal import Deal
 from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
@@ -12,6 +13,11 @@ from app.services import ton_escrow
 
 
 def create_deposit(db: Session, deal: Deal, expected_amount: float | None) -> EscrowPayment:
+    reserve = settings.ton_reserve_ton or 0
+    deal_price = deal.price or 0
+    min_amount = deal_price + reserve
+    if expected_amount is None or expected_amount < min_amount:
+        expected_amount = min_amount
     deposit_address, deposit_key = ton_escrow.create_deposit_wallet(deal.id)
     deposit_key = ton_escrow.encrypt_deposit_key(deposit_key)
     deposit_comment = ton_escrow.build_deposit_comment(deal.id)

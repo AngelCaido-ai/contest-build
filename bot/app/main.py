@@ -30,9 +30,12 @@ async def main() -> None:
         dp.include_router(deals.router)
         dp.include_router(channel_posts.router)
         logger.info("Routers registered")
-        
+
+        await bot.delete_webhook(drop_pending_updates=True)
+        allowed_updates = dp.resolve_used_update_types()
+        logger.info(f"Allowed updates: {allowed_updates}")
         logger.info("Starting polling...")
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, allowed_updates=allowed_updates)
     except Exception as e:
         logger.error(f"Error in main: {e}", exc_info=True)
         raise

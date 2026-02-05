@@ -343,7 +343,7 @@ def bot_update_terms(
     if not payload.actor_tg_user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     role = _get_deal_role(db, deal, payload.actor_tg_user_id)
-    if role != ROLE_ADVERTISER:
+    if role != ROLE_OWNER:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     if deal.status not in {DealStatus.NEGOTIATING, DealStatus.TERMS_LOCKED}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
