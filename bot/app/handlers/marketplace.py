@@ -16,6 +16,7 @@ MENU_REQUESTS = "menu:requests"
 MENU_DEALS = "menu:deals"
 MENU_CREATE_LISTING = "menu:create_listing"
 MENU_CREATE_REQUEST = "menu:create_request"
+MENU_WALLET = "menu:wallet"
 LISTING_PREFIX = "listing:"
 LISTING_RESPOND_PREFIX = "listing_respond:"
 REQUEST_PREFIX = "request:"
@@ -41,6 +42,10 @@ class ListingRespondState(StatesGroup):
 class RequestCreateState(StatesGroup):
     budget = State()
     brief = State()
+
+
+class WalletState(StatesGroup):
+    address = State()
 
 
 def _is_number(value: str) -> bool:
@@ -222,7 +227,8 @@ def _main_menu_keyboard():
     builder.button(text="Deals", callback_data=MENU_DEALS)
     builder.button(text="Create listing", callback_data=MENU_CREATE_LISTING)
     builder.button(text="Create request", callback_data=MENU_CREATE_REQUEST)
-    builder.adjust(2, 2, 1)
+    builder.button(text="Set TON wallet", callback_data=MENU_WALLET)
+    builder.adjust(2, 2, 2)
     return builder.as_markup()
 
 
@@ -245,6 +251,13 @@ def _flow_nav_keyboard(back_data: str | None, cancel_data: str):
     builder.button(text="Отмена", callback_data=cancel_data)
     builder.adjust(2)
     return builder.as_markup()
+
+
+async def _prompt_wallet(message: Message) -> None:
+    await message.answer(
+        "Send TON wallet address for payouts.",
+        reply_markup=_flow_nav_keyboard(f"{FLOW_BACK_PREFIX}wallet:menu", f"{FLOW_CANCEL_PREFIX}wallet"),
+    )
 
 
 async def _prompt_listing_channel_select(message: Message, tg_user_id: int) -> None:
@@ -391,6 +404,15 @@ async def _send_deals(message: Message, tg_user_id: int | None = None) -> None:
 @router.message(CommandTextFilter("menu"))
 async def show_menu(message: Message) -> None:
     await message.answer("Choose an action:", reply_markup=_main_menu_keyboard())
+
+
+@router.message(Command("wallet"))
+@router.message(CommandTextFilter("wallet"))
+async def set_wallet(message: Message, state: FSMContext) -> None:
+    if await state.get_state():
+        await state.clear()
+    await state.set_state(WalletState.address)
+    await _prompt_wallet(message)
 
 
 @router.message(Command("cancel"))
@@ -567,6 +589,16 @@ async def menu_create_request(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.answer()
 
 
+@router.callback_query(F.data == MENU_WALLET)
+async def menu_wallet(callback: CallbackQuery, state: FSMContext) -> None:
+    if await state.get_state():
+        await state.clear()
+    await state.set_state(WalletState.address)
+    if callback.message:
+        await _prompt_wallet(callback.message)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith(FLOW_BACK_PREFIX))
 async def flow_back(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
@@ -602,6 +634,22 @@ async def flow_cancel(callback: CallbackQuery, state: FSMContext) -> None:
         await state.clear()
     await callback.message.answer("Canceled.", reply_markup=_main_menu_keyboard())
     await callback.answer()
+
+
+@router.message(WalletState.address)
+async def wallet_address(message: Message, state: FSMContext) -> None:
+    value = _strip_quotes(message.text or "").strip()
+    if not value:
+        await message.answer("Wallet address is required.")
+        return
+    payload = {"actor_tg_user_id": message.from_user.id, "linked_wallet": value}
+    try:
+        api_client.update_wallet(message.from_user.id, payload)
+        await message.answer("Wallet updated", reply_markup=_main_menu_keyboard())
+    except Exception as exc:
+        await message.answer(f"Failed to update wallet: {exc}")
+        return
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith(LISTING_CHANNEL_PREFIX))

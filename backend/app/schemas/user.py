@@ -11,3 +11,8 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserWalletUpdate(BaseModel):
+    actor_tg_user_id: int | None = None
+    linked_wallet: str | None = None

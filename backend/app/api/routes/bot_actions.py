@@ -28,6 +28,7 @@ from app.schemas.escrow import EscrowOut
 from app.schemas.event import DealEventCreate, DealEventOut
 from app.schemas.listing import ListingOut
 from app.schemas.request import RequestOut
+from app.schemas.user import UserOut, UserWalletUpdate
 from app.services.deal_service import can_transition, log_event, set_status
 from app.services.escrow_service import create_deposit
 from app.services.telegram_service import send_media, send_message
@@ -390,6 +391,26 @@ def bot_update_publish_at(
     db.refresh(deal)
     _notify_deal_parties(db, deal, f"Deal #{deal.id}: publish_at -> {payload.publish_at.isoformat()}.")
     return DealOut.model_validate(deal)
+
+
+@router.post("/users/{tg_user_id}/wallet", response_model=UserOut, dependencies=[Depends(get_bot_secret)])
+def bot_update_wallet(
+    tg_user_id: int,
+    payload: UserWalletUpdate,
+    db: Session = Depends(get_db),
+) -> UserOut:
+    if not payload.actor_tg_user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    if payload.actor_tg_user_id != tg_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    user = _get_or_create_user(db, tg_user_id, [])
+    wallet = (payload.linked_wallet or "").strip()
+    if not wallet:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="linked_wallet is required")
+    user.linked_wallet = wallet
+    db.commit()
+    db.refresh(user)
+    return UserOut.model_validate(user)
 
 
 @router.post("/deals/{deal_id}/status", response_model=DealOut, dependencies=[Depends(get_bot_secret)])

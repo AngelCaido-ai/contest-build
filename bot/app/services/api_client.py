@@ -29,6 +29,12 @@ def update_publish_at(deal_id: int, payload: dict) -> dict:
     return resp.json()
 
 
+def update_wallet(tg_user_id: int, payload: dict) -> dict:
+    resp = requests.post(_url(f"/bot/users/{tg_user_id}/wallet"), json=payload, headers=_headers())
+    resp.raise_for_status()
+    return resp.json()
+
+
 def update_status(deal_id: int, payload: dict) -> dict:
     resp = requests.post(
         _url(f"/bot/deals/{deal_id}/status"),
