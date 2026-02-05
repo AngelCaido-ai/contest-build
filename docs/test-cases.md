@@ -44,9 +44,9 @@
 - TC-ESC-03 — подтверждение оплаты ботом — статус `FUNDED`, `confirmed_at` установлен
 
 ## Креатив
-- TC-CR-01 — создание текстового креатива — `/bot/deals/{id}/creative` — `CREATIVE_DRAFT`
+- TC-CR-01 — создание текстового креатива — `/bot/deals/{id}/creative` — `CREATIVE_REVIEW`
 - TC-CR-02 — создание креатива с media — `media_file_ids` заполнен
-- TC-CR-03 — смена статуса на `REVIEW` — сделка `CREATIVE_REVIEW`
+- TC-CR-03 — смена статуса на `DRAFT` — сделка `CREATIVE_DRAFT`
 - TC-CR-04 — смена статуса на `APPROVED` — сделка `APPROVED`
 
 ## Автопостинг и верификация

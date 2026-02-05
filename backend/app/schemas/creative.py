@@ -14,6 +14,8 @@ class CreativeCreate(BaseModel):
 class CreativeStatusUpdate(BaseModel):
     actor_tg_user_id: int | None = None
     status: CreativeStatus
+    comment: str | None = None
+    publish_at: datetime | None = None
 
 
 class CreativeOut(BaseModel):

@@ -6,7 +6,14 @@ from aiogram import F, Router
 from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    CallbackQuery,
+    InputMediaAnimation,
+    InputMediaDocument,
+    InputMediaPhoto,
+    InputMediaVideo,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.app.services import api_client
@@ -29,6 +36,8 @@ DEAL_CREATIVE_STATUS_PREFIX = "deal_creative_status:"
 DEAL_CREATIVE_STATUS_SET_PREFIX = "deal_creative_status_set:"
 DEAL_CREATIVE_STATUS_BACK_PREFIX = "deal_creative_status_back:"
 DEAL_CREATIVE_STATUS_CANCEL_PREFIX = "deal_creative_status_cancel:"
+DEAL_CREATIVE_VIEW_PREFIX = "deal_creative_view:"
+DEAL_CREATIVE_PREVIOUS_PREFIX = "deal_creative_previous:"
 
 DEAL_STATUSES = {
     "NEGOTIATING",
@@ -136,6 +145,8 @@ class CreativeState(StatesGroup):
 
 class CreativeStatusState(StatesGroup):
     status = State()
+    comment = State()
+    publish_at = State()
 
 
 CREATIVE_STATUS_ORDER = ["DRAFT", "REVIEW", "APPROVED"]
@@ -233,7 +244,60 @@ def _creative_status_keyboard(deal_id: int, statuses: list[str]):
     return builder.as_markup()
 
 
-def _deal_actions_keyboard(deal: dict, role: str):
+def _normalize_media_items(media_items: list[dict] | list[str] | None) -> list[dict]:
+    normalized: list[dict] = []
+    for item in media_items or []:
+        if isinstance(item, dict):
+            file_id = item.get("file_id")
+            media_type = item.get("type") or "document"
+        elif isinstance(item, str):
+            file_id = item
+            media_type = "photo"
+        else:
+            continue
+        if not file_id:
+            continue
+        if media_type not in {"photo", "document", "video", "animation"}:
+            media_type = "document"
+        normalized.append({"type": media_type, "media": file_id})
+    return normalized
+
+
+async def _send_creative_preview(message: Message, creative: dict) -> None:
+    text = creative.get("text")
+    media_items = _normalize_media_items(creative.get("media_file_ids"))
+    if not media_items:
+        if text:
+            await message.answer(text)
+        return
+    if len(media_items) == 1:
+        media = media_items[0]
+        if media["type"] == "photo":
+            await message.answer_photo(media["media"], caption=text)
+            return
+        if media["type"] == "video":
+            await message.answer_video(media["media"], caption=text)
+            return
+        if media["type"] == "animation":
+            await message.answer_animation(media["media"], caption=text)
+            return
+        await message.answer_document(media["media"], caption=text)
+        return
+    group = []
+    for index, media in enumerate(media_items):
+        caption = text if index == 0 else None
+        if media["type"] == "photo":
+            group.append(InputMediaPhoto(media["media"], caption=caption))
+        elif media["type"] == "video":
+            group.append(InputMediaVideo(media["media"], caption=caption))
+        elif media["type"] == "animation":
+            group.append(InputMediaAnimation(media["media"], caption=caption))
+        else:
+            group.append(InputMediaDocument(media["media"], caption=caption))
+    await message.answer_media_group(media=group)
+
+
+def _deal_actions_keyboard(deal: dict, role: str, creative_version: int | None = None):
     deal_id = deal.get("id")
     status = (deal.get("status") or "").upper()
     allowed_statuses = _allowed_transitions_for_role(status, role)
@@ -246,6 +310,22 @@ def _deal_actions_keyboard(deal: dict, role: str):
         builder.button(text="Create creative", callback_data=f"{DEAL_CREATIVE_PREFIX}{deal_id}")
     if role == ROLE_ADVERTISER and status in {"CREATIVE_REVIEW"}:
         builder.button(text="Creative status", callback_data=f"{DEAL_CREATIVE_STATUS_PREFIX}{deal_id}")
+    view_statuses = {
+        "CREATIVE_REVIEW",
+        "CREATIVE_DRAFT",
+        "APPROVED",
+        "SCHEDULED",
+        "POSTED",
+        "VERIFYING",
+        "RELEASED",
+    }
+    if role in {ROLE_ADVERTISER, ROLE_OWNER} and status in view_statuses:
+        builder.button(text="View creative", callback_data=f"{DEAL_CREATIVE_VIEW_PREFIX}{deal_id}")
+    if role == ROLE_OWNER and creative_version and creative_version > 1 and status in view_statuses:
+        builder.button(
+            text="View previous creative",
+            callback_data=f"{DEAL_CREATIVE_PREVIOUS_PREFIX}{deal_id}:{creative_version - 1}",
+        )
     if allowed_statuses:
         builder.button(text="Change status", callback_data=f"{DEAL_STATUS_PREFIX}{deal_id}")
     builder.button(text="Back to deals", callback_data="menu:deals")
@@ -301,6 +381,26 @@ async def _prompt_terms_format(message: Message, deal_id: int) -> None:
     await message.answer("Enter format or 'skip'.", reply_markup=_terms_keyboard(deal_id, "verification_window"))
 
 
+async def _prompt_creative_status_comment(message: Message, deal_id: int) -> None:
+    await message.answer(
+        "Send comment for owner to update creative.",
+        reply_markup=_nav_keyboard(
+            f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}",
+            f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}",
+        ),
+    )
+
+
+async def _prompt_creative_status_publish_at(message: Message, deal_id: int) -> None:
+    await message.answer(
+        "Enter publish_at in ISO format.",
+        reply_markup=_nav_keyboard(
+            f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}",
+            f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}",
+        ),
+    )
+
+
 async def _send_deal_details(message: Message, deal_id: int, tg_user_id: int | None = None) -> None:
     try:
         deal = api_client.get_deal(deal_id)
@@ -309,7 +409,28 @@ async def _send_deal_details(message: Message, deal_id: int, tg_user_id: int | N
         return
     actor_id = tg_user_id if tg_user_id is not None else message.from_user.id
     role = _resolve_deal_role(actor_id, deal)
-    await message.answer(_deal_text(deal, role), reply_markup=_deal_actions_keyboard(deal, role))
+    creative_version = None
+    status = (deal.get("status") or "").upper()
+    if status in {
+        "CREATIVE_REVIEW",
+        "CREATIVE_DRAFT",
+        "APPROVED",
+        "SCHEDULED",
+        "POSTED",
+        "VERIFYING",
+        "RELEASED",
+    }:
+        try:
+            creative = api_client.get_creative(deal_id, actor_id)
+            version_value = creative.get("version")
+            if isinstance(version_value, int):
+                creative_version = version_value
+        except Exception:
+            creative_version = None
+    await message.answer(
+        _deal_text(deal, role),
+        reply_markup=_deal_actions_keyboard(deal, role, creative_version),
+    )
 
 
 @router.message(Command("deal"))
@@ -755,6 +876,14 @@ async def deal_creative_status_start(callback: CallbackQuery, state: FSMContext)
             await callback.message.answer("Only advertiser can review creative.")
         await callback.answer()
         return
+    if callback.message:
+        try:
+            creative = api_client.get_creative(deal_id, callback.from_user.id)
+        except Exception as exc:
+            await callback.message.answer(f"Failed to load creative: {exc}")
+            await callback.answer()
+            return
+        await _send_creative_preview(callback.message, creative)
     await state.update_data(deal_id=deal_id)
     await state.set_state(CreativeStatusState.status)
     if callback.message:
@@ -772,6 +901,26 @@ async def deal_creative_status_set(callback: CallbackQuery, state: FSMContext) -
         return
     _, deal_id_value, status_value = callback.data.split(":", 2)
     deal_id = int(deal_id_value)
+    status_value = status_value.upper()
+    if status_value == "DRAFT":
+        await state.update_data(deal_id=deal_id, status=status_value)
+        await state.set_state(CreativeStatusState.comment)
+        await _prompt_creative_status_comment(callback.message, deal_id)
+        await callback.answer()
+        return
+    if status_value == "APPROVED":
+        try:
+            deal = api_client.get_deal(deal_id)
+        except Exception as exc:
+            await callback.message.answer(f"Failed to load deal: {exc}")
+            await callback.answer()
+            return
+        if not deal.get("publish_at"):
+            await state.update_data(deal_id=deal_id, status=status_value)
+            await state.set_state(CreativeStatusState.publish_at)
+            await _prompt_creative_status_publish_at(callback.message, deal_id)
+            await callback.answer()
+            return
     try:
         api_client.update_creative_status(
             deal_id,
@@ -810,6 +959,92 @@ async def deal_creative_status_cancel(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith(DEAL_CREATIVE_PREVIOUS_PREFIX))
+async def deal_creative_previous(callback: CallbackQuery) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    _, deal_id_value, version_value = callback.data.split(":", 2)
+    deal_id = int(deal_id_value)
+    version = int(version_value)
+    try:
+        creative = api_client.get_creative(deal_id, callback.from_user.id, version=version)
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load creative: {exc}")
+        await callback.answer()
+        return
+    await callback.message.answer(f"Creative v{version}")
+    await _send_creative_preview(callback.message, creative)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_CREATIVE_VIEW_PREFIX))
+async def deal_creative_view(callback: CallbackQuery) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    try:
+        creative = api_client.get_creative(deal_id, callback.from_user.id)
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load creative: {exc}")
+        await callback.answer()
+        return
+    await _send_creative_preview(callback.message, creative)
+    await callback.answer()
+
+
+@router.message(CreativeStatusState.comment)
+async def deal_creative_status_comment(message: Message, state: FSMContext) -> None:
+    comment = (message.text or "").strip()
+    if not comment:
+        await message.answer("Comment is required.")
+        return
+    data = await state.get_data()
+    deal_id = data["deal_id"]
+    status_value = (data.get("status") or "DRAFT").upper()
+    try:
+        api_client.update_creative_status(
+            deal_id,
+            {"status": status_value, "actor_tg_user_id": message.from_user.id, "comment": comment},
+        )
+        await message.answer("Creative status updated")
+    except Exception as exc:
+        await message.answer(f"Failed to update creative status: {exc}")
+    await state.clear()
+    await _send_deal_details(message, deal_id)
+
+
+@router.message(CreativeStatusState.publish_at)
+async def deal_creative_status_publish_at(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    try:
+        publish_at = _normalize_datetime(value)
+    except ValueError:
+        await message.answer("Invalid datetime. Use ISO format.")
+        return
+    if not publish_at:
+        await message.answer("Publish_at is required.")
+        return
+    data = await state.get_data()
+    deal_id = data["deal_id"]
+    status_value = (data.get("status") or "APPROVED").upper()
+    try:
+        api_client.update_creative_status(
+            deal_id,
+            {
+                "status": status_value,
+                "actor_tg_user_id": message.from_user.id,
+                "publish_at": publish_at,
+            },
+        )
+        await message.answer("Creative status updated")
+    except Exception as exc:
+        await message.answer(f"Failed to update creative status: {exc}")
+    await state.clear()
+    await _send_deal_details(message, deal_id)
+
+
 @router.message(CreativeStatusState.status)
 async def deal_creative_status_value(message: Message, state: FSMContext) -> None:
     value = (message.text or "").strip().upper()
@@ -817,16 +1052,33 @@ async def deal_creative_status_value(message: Message, state: FSMContext) -> Non
         await message.answer("Unknown creative status.")
         return
     data = await state.get_data()
+    deal_id = data["deal_id"]
+    if value == "DRAFT":
+        await state.update_data(status=value)
+        await state.set_state(CreativeStatusState.comment)
+        await _prompt_creative_status_comment(message, deal_id)
+        return
+    if value == "APPROVED":
+        try:
+            deal = api_client.get_deal(deal_id)
+        except Exception as exc:
+            await message.answer(f"Failed to load deal: {exc}")
+            return
+        if not deal.get("publish_at"):
+            await state.update_data(status=value)
+            await state.set_state(CreativeStatusState.publish_at)
+            await _prompt_creative_status_publish_at(message, deal_id)
+            return
     try:
         api_client.update_creative_status(
-            data["deal_id"],
+            deal_id,
             {"status": value, "actor_tg_user_id": message.from_user.id},
         )
         await message.answer("Creative status updated")
     except Exception as exc:
         await message.answer(f"Failed to update creative status: {exc}")
     await state.clear()
-    await _send_deal_details(message, data["deal_id"])
+    await _send_deal_details(message, deal_id)
 
 
 @router.message(Command("terms"))
@@ -911,16 +1163,44 @@ async def create_creative(message: Message, state: FSMContext) -> None:
 async def creative_status(message: Message, state: FSMContext) -> None:
     if await state.get_state():
         await state.clear()
-    parts = (message.text or "").split()
+    parts = (message.text or "").split(maxsplit=3)
     if len(parts) < 3:
         await message.answer("Usage: /creative_status DEAL_ID STATUS")
         return
     deal_id = int(parts[1])
-    status_value = parts[2]
+    status_value = parts[2].upper()
+    extra = parts[3].strip() if len(parts) > 3 else ""
+    payload = {"status": status_value, "actor_tg_user_id": message.from_user.id}
+    if status_value == "DRAFT":
+        if not extra:
+            await message.answer("Comment required. Usage: /creative_status DEAL_ID DRAFT COMMENT")
+            return
+        payload["comment"] = extra
+    if status_value == "APPROVED":
+        publish_at = None
+        try:
+            deal = api_client.get_deal(deal_id)
+            publish_at = deal.get("publish_at")
+        except Exception as exc:
+            await message.answer(f"Failed to load deal: {exc}")
+            return
+        if not publish_at:
+            if not extra:
+                await message.answer("publish_at required. Usage: /creative_status DEAL_ID APPROVED PUBLISH_AT")
+                return
+            try:
+                publish_at = _normalize_datetime(extra)
+            except ValueError:
+                await message.answer("Invalid datetime. Use ISO format.")
+                return
+            if not publish_at:
+                await message.answer("Publish_at is required.")
+                return
+            payload["publish_at"] = publish_at
     try:
         api_client.update_creative_status(
             deal_id,
-            {"status": status_value, "actor_tg_user_id": message.from_user.id},
+            payload,
         )
         await message.answer("Creative status updated")
     except Exception as exc:

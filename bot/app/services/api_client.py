@@ -39,6 +39,19 @@ def create_creative(deal_id: int, payload: dict) -> dict:
     return resp.json()
 
 
+def get_creative(deal_id: int, tg_user_id: int, version: int | None = None) -> dict:
+    params = {"tg_user_id": tg_user_id}
+    if version is not None:
+        params["version"] = version
+    resp = requests.get(
+        _url(f"/bot/deals/{deal_id}/creative"),
+        params=params,
+        headers=_headers(),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def update_creative_status(deal_id: int, payload: dict) -> dict:
     resp = requests.post(
         _url(f"/bot/deals/{deal_id}/creative/status"),
