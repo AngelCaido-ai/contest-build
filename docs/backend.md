@@ -381,7 +381,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/bot/users/{tg_user_id}/wallet` | Привязать кошелёк |
 | `POST` | `/bot/channels` | Создать/обновить канал |
 | `GET` | `/bot/channels` | Список каналов пользователя (по `tg_user_id`) |
-| `POST` | `/bot/listings` | Создать листинг |
+| `POST` | `/bot/listings` | Создать листинг (требуется `linked_wallet`, иначе 400) |
 | `POST` | `/bot/requests` | Создать заявку |
 | `POST` | `/bot/deals` | Создать сделку |
 | `GET` | `/bot/deals` | Список сделок (фильтры: `tg_user_id`, `statuses`, `role`, `channel_id`, `limit`, `offset`, `order_by`) |

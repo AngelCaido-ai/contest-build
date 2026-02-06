@@ -286,6 +286,11 @@ def bot_list_channels(tg_user_id: int, db: Session = Depends(get_db)) -> list[Ch
 @router.post("/listings", response_model=ListingOut, dependencies=[Depends(get_bot_secret)])
 def bot_create_listing(payload: BotListingCreate, db: Session = Depends(get_db)) -> ListingOut:
     user = _get_or_create_user(db, payload.owner_tg_user_id, ["owner"])
+    if not user.linked_wallet:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Wallet is required to create a listing",
+        )
     channel = db.get(Channel, payload.channel_id)
     if not channel:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
