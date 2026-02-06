@@ -1,6 +1,7 @@
 # Дневник изменений
 
 ## backend
+- 2026-02-06: Добавлена серверная проверка tamper через editMessageText/editMessageCaption (check_tampered_posts), не зависящая от polling обновлений бота.
 - 2026-02-06: Исправлен расчёт минимальной суммы депозита при Decimal значениях цены и резерва.
 - 2026-02-06: Централизованное логирование и обработка исключений: настроен logging.basicConfig в main.py, добавлен глобальный exception_handler для необработанных ошибок.
 - 2026-02-06: Все API-роуты (auth, channels, deals, escrow, listings, requests, bot_actions) обёрнуты в try/except с логированием ошибок и успешных операций.
