@@ -1,6 +1,7 @@
 # Дневник изменений
 
 ## backend
+- 2026-02-06: Добавлен эндпоинт /bot/test-deal для создания тестовой сделки (SCHEDULED, креатив "testtest", publish через 2 мин, verification_window 10 мин).
 - 2026-02-06: Добавлена серверная проверка tamper через editMessageText/editMessageCaption (check_tampered_posts), не зависящая от polling обновлений бота.
 - 2026-02-06: Исправлен расчёт минимальной суммы депозита при Decimal значениях цены и резерва.
 - 2026-02-06: Централизованное логирование и обработка исключений: настроен logging.basicConfig в main.py, добавлен глобальный exception_handler для необработанных ошибок.
@@ -52,6 +53,7 @@
 - 2026-01-27: Интеграционный тест проверяет seqno и исходящую транзакцию.
 
 ## bot
+- 2026-02-06: Добавлена команда /test_deal для быстрого создания тестовой сделки с постом через 2 мин.
 - 2026-02-06: Для tamper detection добавлен sender_chat id как источник channel_tg_chat_id.
 - 2026-02-06: Добавлен fallback для правок через channel_post с edit_date и включён channel_post в allowed_updates.
 - 2026-02-06: В polling добавлено явное включение edited_channel_post и edited_message для фиксации правок постов.

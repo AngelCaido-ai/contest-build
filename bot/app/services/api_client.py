@@ -386,3 +386,20 @@ def create_deal(payload: dict) -> dict:
     except Exception:
         logger.exception("create_deal: error")
         raise
+
+
+def create_test_deal(tg_user_id: int) -> dict:
+    logger.info("create_test_deal: tg_user_id=%s", tg_user_id)
+    try:
+        resp = requests.post(
+            _url("/bot/test-deal"),
+            params={"tg_user_id": tg_user_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        logger.info("create_test_deal: success deal_id=%s", result.get("deal_id"))
+        return result
+    except Exception:
+        logger.exception("create_test_deal: error tg_user_id=%s", tg_user_id)
+        raise

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
@@ -743,6 +744,60 @@ def bot_mark_deleted(payload: TamperRequest, db: Session = Depends(get_db)) -> d
     except Exception:
         logger.exception("deleted: error deal_id=%s", deal.id)
         raise
+
+
+@router.post("/test-deal", dependencies=[Depends(get_bot_secret)])
+def bot_create_test_deal(
+    tg_user_id: int = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    channel_ids = [c.id for c in db.query(Channel).filter(Channel.owner_user_id == user.id).all()]
+    if not channel_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No channels found")
+    channel_id = channel_ids[0]
+    listing = Listing(
+        channel_id=channel_id,
+        price_ton=0.01,
+        format="post",
+        active=True,
+    )
+    db.add(listing)
+    db.flush()
+    now = datetime.utcnow()
+    deal = Deal(
+        listing_id=listing.id,
+        advertiser_id=user.id,
+        channel_id=channel_id,
+        price=0.01,
+        format="post",
+        brief="test deal",
+        publish_at=now + timedelta(minutes=2),
+        verification_window=10,
+        status=DealStatus.SCHEDULED,
+    )
+    db.add(deal)
+    db.flush()
+    creative = Creative(
+        deal_id=deal.id,
+        text="testtest",
+        version=1,
+        status=CreativeStatus.APPROVED,
+    )
+    db.add(creative)
+    log_event(db, deal.id, "TEST_DEAL_CREATED")
+    db.commit()
+    db.refresh(deal)
+    logger.info("bot_create_test_deal: deal_id=%s publish_at=%s", deal.id, deal.publish_at)
+    return {
+        "status": "ok",
+        "deal_id": deal.id,
+        "listing_id": listing.id,
+        "publish_at": deal.publish_at.isoformat(),
+        "verification_window": deal.verification_window,
+    }
 
 
 @router.post("/channels", dependencies=[Depends(get_bot_secret)])
