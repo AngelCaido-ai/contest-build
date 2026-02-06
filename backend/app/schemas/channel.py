@@ -19,7 +19,17 @@ class ChannelUpdate(BaseModel):
 
 
 class ChannelManagerCreate(BaseModel):
+    user_id: int | None = None
+    tg_username: str | None = None
+    permissions: dict | None = None
+
+
+class ChannelManagerOut(BaseModel):
+    id: int
+    channel_id: int
     user_id: int
+    tg_user_id: int
+    tg_username: str | None
     permissions: dict | None = None
 
 

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,7 @@ from app.models.channel import Channel
 from app.models.listing import Listing
 from app.schemas.listing import ListingCreate, ListingOut, ListingUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -18,19 +21,26 @@ def create_listing(
     channel = db.get(Channel, payload.channel_id)
     if not channel or channel.owner_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    listing = Listing(
-        channel_id=payload.channel_id,
-        price_ton=payload.price_ton,
-        price_usd=payload.price_usd,
-        format=payload.format or "post",
-        categories=payload.categories,
-        constraints=payload.constraints,
-        active=payload.active if payload.active is not None else True,
-    )
-    db.add(listing)
-    db.commit()
-    db.refresh(listing)
-    return ListingOut.model_validate(listing)
+    try:
+        listing = Listing(
+            channel_id=payload.channel_id,
+            price_ton=payload.price_ton,
+            price_usd=payload.price_usd,
+            format=payload.format or "post",
+            categories=payload.categories,
+            constraints=payload.constraints,
+            active=payload.active if payload.active is not None else True,
+        )
+        db.add(listing)
+        db.commit()
+        db.refresh(listing)
+        logger.info("create_listing: success listing_id=%s channel_id=%s user_id=%s", listing.id, payload.channel_id, user.id)
+        return ListingOut.model_validate(listing)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("create_listing: error channel_id=%s user_id=%s", payload.channel_id, user.id)
+        raise
 
 
 @router.get("/", response_model=list[ListingOut])
@@ -75,9 +85,16 @@ def update_listing(
     channel = db.get(Channel, listing.channel_id)
     if not channel or channel.owner_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    update_data = payload.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(listing, key, value)
-    db.commit()
-    db.refresh(listing)
-    return ListingOut.model_validate(listing)
+    try:
+        update_data = payload.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(listing, key, value)
+        db.commit()
+        db.refresh(listing)
+        logger.info("update_listing: success listing_id=%s user_id=%s", listing_id, user.id)
+        return ListingOut.model_validate(listing)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("update_listing: error listing_id=%s user_id=%s", listing_id, user.id)
+        raise

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,7 @@ from app.schemas.escrow import (
 )
 from app.services.escrow_service import confirm_payment, create_deposit, refund_payment, release_payment
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -36,8 +39,15 @@ def create_deposit_address(
         return EscrowOut.model_validate(existing)
     if deal.status not in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    payment = create_deposit(db, deal, payload.expected_amount)
-    return EscrowOut.model_validate(payment)
+    try:
+        payment = create_deposit(db, deal, payload.expected_amount)
+        logger.info("create_deposit: success deal_id=%s user_id=%s", deal_id, user.id)
+        return EscrowOut.model_validate(payment)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("create_deposit: error deal_id=%s user_id=%s", deal_id, user.id)
+        raise
 
 
 @router.post(
@@ -56,8 +66,15 @@ def confirm_deposit(
     payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = confirm_payment(db, deal, payment, payload.tx_hash)
-    return EscrowOut.model_validate(updated)
+    try:
+        updated = confirm_payment(db, deal, payment, payload.tx_hash)
+        logger.info("confirm_deposit: success deal_id=%s tx_hash=%s", deal_id, payload.tx_hash)
+        return EscrowOut.model_validate(updated)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("confirm_deposit: error deal_id=%s", deal_id)
+        raise
 
 
 @router.post(
@@ -78,9 +95,14 @@ def release_escrow(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     try:
         updated = release_payment(db, deal, payload.payout_address)
+        logger.info("release_escrow: success deal_id=%s", deal_id)
+        return EscrowOut.model_validate(updated)
     except ValueError as exc:
+        logger.warning("release_escrow: validation error deal_id=%s error=%s", deal_id, exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return EscrowOut.model_validate(updated)
+    except Exception:
+        logger.exception("release_escrow: error deal_id=%s", deal_id)
+        raise
 
 
 @router.post(
@@ -101,6 +123,11 @@ def refund_escrow(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     try:
         updated = refund_payment(db, deal, payload.refund_address, payload.reason)
+        logger.info("refund_escrow: success deal_id=%s reason=%s", deal_id, payload.reason)
+        return EscrowOut.model_validate(updated)
     except ValueError as exc:
+        logger.warning("refund_escrow: validation error deal_id=%s error=%s", deal_id, exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return EscrowOut.model_validate(updated)
+    except Exception:
+        logger.exception("refund_escrow: error deal_id=%s", deal_id)
+        raise

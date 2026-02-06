@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.request import Request
 from app.schemas.request import RequestCreate, RequestOut, RequestUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -14,20 +17,27 @@ def create_request(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> RequestOut:
-    item = Request(
-        advertiser_id=user.id,
-        budget=payload.budget,
-        niche=payload.niche,
-        languages=payload.languages,
-        min_subs=payload.min_subs,
-        min_views=payload.min_views,
-        dates=payload.dates,
-        brief=payload.brief,
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return RequestOut.model_validate(item)
+    try:
+        item = Request(
+            advertiser_id=user.id,
+            budget=payload.budget,
+            niche=payload.niche,
+            languages=payload.languages,
+            min_subs=payload.min_subs,
+            min_views=payload.min_views,
+            dates=payload.dates,
+            brief=payload.brief,
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        logger.info("create_request: success request_id=%s user_id=%s", item.id, user.id)
+        return RequestOut.model_validate(item)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("create_request: error user_id=%s", user.id)
+        raise
 
 
 @router.get("/", response_model=list[RequestOut])
@@ -65,9 +75,16 @@ def update_request(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if item.advertiser_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    update_data = payload.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(item, key, value)
-    db.commit()
-    db.refresh(item)
-    return RequestOut.model_validate(item)
+    try:
+        update_data = payload.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(item, key, value)
+        db.commit()
+        db.refresh(item)
+        logger.info("update_request: success request_id=%s user_id=%s", request_id, user.id)
+        return RequestOut.model_validate(item)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("update_request: error request_id=%s user_id=%s", request_id, user.id)
+        raise

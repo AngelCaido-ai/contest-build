@@ -17,6 +17,11 @@ class BotChannelCreate(BaseModel):
     rights_snapshot: dict | None = None
 
 
+class BotUserUpsert(BaseModel):
+    tg_user_id: int
+    tg_username: str | None = None
+
+
 class BotListingCreate(BaseModel):
     owner_tg_user_id: int
     channel_id: int

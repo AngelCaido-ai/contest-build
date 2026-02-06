@@ -1,6 +1,10 @@
+import logging
+
 from app.models.deal import Deal
 from app.models.deal_event import DealEvent
 from app.models.enums import DealStatus
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_TRANSITIONS: dict[DealStatus, set[DealStatus]] = {
     DealStatus.NEGOTIATING: {DealStatus.TERMS_LOCKED, DealStatus.CANCELED},
@@ -22,8 +26,11 @@ def can_transition(current: DealStatus, new_status: DealStatus) -> bool:
 
 
 def set_status(deal: Deal, new_status: DealStatus) -> None:
+    old_status = deal.status
     deal.status = new_status
+    logger.info("deal status change: deal_id=%s %s -> %s", deal.id, old_status, new_status)
 
 
 def log_event(db, deal_id: int, event_type: str, payload: dict | None = None) -> None:
     db.add(DealEvent(deal_id=deal_id, type=event_type, payload=payload))
+    logger.info("deal event: deal_id=%s type=%s", deal_id, event_type)

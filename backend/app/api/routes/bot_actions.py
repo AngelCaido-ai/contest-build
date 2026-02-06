@@ -1,6 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import get_bot_secret, get_db
 from app.models.channel import Channel
@@ -19,6 +23,7 @@ from app.schemas.bot import (
     BotEscrowDepositRequest,
     BotListingCreate,
     BotRequestCreate,
+    BotUserUpsert,
     TamperRequest,
 )
 from app.schemas.channel import ChannelOut
@@ -55,6 +60,32 @@ ROLE_ALLOWED_STATUSES: dict[str, set[DealStatus]] = {
 }
 
 
+def _normalize_tg_username(value: str | None) -> str | None:
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if value.startswith("@"):
+        value = value[1:]
+    value = value.lower()
+    return value or None
+
+
+def _sync_tg_username(db: Session, user: User, username: str | None) -> bool:
+    if not username:
+        return False
+    changed = False
+    existing = db.query(User).filter(User.tg_username == username, User.id != user.id).first()
+    if existing:
+        existing.tg_username = None
+        changed = True
+    if user.tg_username != username:
+        user.tg_username = username
+        changed = True
+    return changed
+
+
 def _get_or_create_user(db: Session, tg_user_id: int, roles: list[str]) -> User:
     user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
     if not user:
@@ -71,6 +102,26 @@ def _get_or_create_user(db: Session, tg_user_id: int, roles: list[str]) -> User:
             db.commit()
             db.refresh(user)
     return user
+
+
+@router.post("/users/upsert", dependencies=[Depends(get_bot_secret)])
+def bot_upsert_user(payload: BotUserUpsert, db: Session = Depends(get_db)) -> dict:
+    try:
+        username = _normalize_tg_username(payload.tg_username)
+        user = db.query(User).filter(User.tg_user_id == payload.tg_user_id).first()
+        if not user:
+            user = User(tg_user_id=payload.tg_user_id, roles=["advertiser"])
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info("bot_upsert_user: created user tg_user_id=%s", payload.tg_user_id)
+        if _sync_tg_username(db, user, username):
+            db.commit()
+            db.refresh(user)
+        return {"status": "ok", "user_id": user.id}
+    except Exception:
+        logger.exception("bot_upsert_user: error tg_user_id=%s", payload.tg_user_id)
+        raise
 
 
 def _get_actor_user(db: Session, tg_user_id: int) -> User:
@@ -171,16 +222,50 @@ def bot_get_deal(deal_id: int, db: Session = Depends(get_db)) -> DealOut:
 
 
 @router.get("/deals", response_model=list[DealOut], dependencies=[Depends(get_bot_secret)])
-def bot_list_deals(tg_user_id: int, db: Session = Depends(get_db)) -> list[DealOut]:
+def bot_list_deals(
+    tg_user_id: int,
+    statuses: list[DealStatus] | None = Query(None),
+    role: str | None = None,
+    channel_id: int | None = None,
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    order_by: str | None = None,
+    db: Session = Depends(get_db),
+) -> list[DealOut]:
     user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
     if not user:
         return []
     channel_ids = [c.id for c in db.query(Channel).filter(Channel.owner_user_id == user.id).all()]
-    items = (
-        db.query(Deal)
-        .filter(or_(Deal.advertiser_id == user.id, Deal.channel_id.in_(channel_ids)))
-        .all()
-    )
+    query = db.query(Deal)
+    if role:
+        role_value = role.lower()
+        if role_value == ROLE_OWNER:
+            if not channel_ids:
+                return []
+            query = query.filter(Deal.channel_id.in_(channel_ids))
+        elif role_value == ROLE_ADVERTISER:
+            query = query.filter(Deal.advertiser_id == user.id)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    else:
+        if channel_ids:
+            query = query.filter(or_(Deal.advertiser_id == user.id, Deal.channel_id.in_(channel_ids)))
+        else:
+            query = query.filter(Deal.advertiser_id == user.id)
+    if channel_id is not None:
+        query = query.filter(Deal.channel_id == channel_id)
+    if statuses:
+        query = query.filter(Deal.status.in_(statuses))
+    order_value = (order_by or "updated_at_desc").lower()
+    if order_value == "updated_at_asc":
+        query = query.order_by(Deal.updated_at.asc())
+    elif order_value == "created_at_asc":
+        query = query.order_by(Deal.created_at.asc())
+    elif order_value == "created_at_desc":
+        query = query.order_by(Deal.created_at.desc())
+    else:
+        query = query.order_by(Deal.updated_at.desc())
+    items = query.offset(offset).limit(limit).all()
     return [DealOut.model_validate(item) for item in items]
 
 
@@ -305,12 +390,19 @@ def bot_create_deal(payload: BotDealCreate, db: Session = Depends(get_db)) -> De
             verification_window=payload.verification_window,
             status=DealStatus.NEGOTIATING,
         )
-    db.add(deal)
-    db.commit()
-    db.refresh(deal)
-    log_event(db, deal.id, "DEAL_CREATED")
-    db.commit()
-    return DealOut.model_validate(deal)
+    try:
+        db.add(deal)
+        db.commit()
+        db.refresh(deal)
+        log_event(db, deal.id, "DEAL_CREATED")
+        db.commit()
+        logger.info("bot_create_deal: success deal_id=%s", deal.id)
+        return DealOut.model_validate(deal)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("bot_create_deal: error")
+        raise
 
 
 @router.post("/deals/{deal_id}/deposit", response_model=EscrowOut, dependencies=[Depends(get_bot_secret)])
@@ -326,9 +418,16 @@ def bot_create_deposit(deal_id: int, payload: BotEscrowDepositRequest, db: Sessi
         return EscrowOut.model_validate(existing)
     if deal.status not in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    expected_amount = payload.expected_amount or deal.price
-    payment = create_deposit(db, deal, expected_amount)
-    return EscrowOut.model_validate(payment)
+    try:
+        expected_amount = payload.expected_amount or deal.price
+        payment = create_deposit(db, deal, expected_amount)
+        logger.info("bot_create_deposit: success deal_id=%s", deal_id)
+        return EscrowOut.model_validate(payment)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("bot_create_deposit: error deal_id=%s", deal_id)
+        raise
 
 
 @router.post("/deals/{deal_id}/terms", response_model=DealOut, dependencies=[Depends(get_bot_secret)])
@@ -353,12 +452,19 @@ def bot_update_terms(
     log_payload.pop("actor_tg_user_id", None)
     for key, value in update_data.items():
         setattr(deal, key, value)
-    set_status(deal, DealStatus.TERMS_LOCKED)
-    log_event(db, deal.id, "TERMS_LOCKED", log_payload)
-    db.commit()
-    db.refresh(deal)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: terms locked.")
-    return DealOut.model_validate(deal)
+    try:
+        set_status(deal, DealStatus.TERMS_LOCKED)
+        log_event(db, deal.id, "TERMS_LOCKED", log_payload)
+        db.commit()
+        db.refresh(deal)
+        _notify_deal_parties(db, deal, f"Deal #{deal.id}: terms locked.")
+        logger.info("bot_update_terms: success deal_id=%s", deal_id)
+        return DealOut.model_validate(deal)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("bot_update_terms: error deal_id=%s", deal_id)
+        raise
 
 
 @router.post("/deals/{deal_id}/publish_at", response_model=DealOut, dependencies=[Depends(get_bot_secret)])
@@ -434,12 +540,19 @@ def bot_update_status(
         existing = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
         if not existing:
             create_deposit(db, deal, deal.price)
-    set_status(deal, payload.status)
-    log_event(db, deal.id, "STATUS_UPDATED", {"status": payload.status})
-    db.commit()
-    db.refresh(deal)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: status -> {payload.status.value}.")
-    return DealOut.model_validate(deal)
+    try:
+        set_status(deal, payload.status)
+        log_event(db, deal.id, "STATUS_UPDATED", {"status": payload.status})
+        db.commit()
+        db.refresh(deal)
+        _notify_deal_parties(db, deal, f"Deal #{deal.id}: status -> {payload.status.value}.")
+        logger.info("bot_update_status: success deal_id=%s status=%s", deal_id, payload.status.value)
+        return DealOut.model_validate(deal)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("bot_update_status: error deal_id=%s status=%s", deal_id, payload.status)
+        raise
 
 
 @router.post("/deals/{deal_id}/creative", response_model=CreativeOut, dependencies=[Depends(get_bot_secret)])
@@ -469,14 +582,21 @@ def bot_create_creative(
         version=version,
         status=CreativeStatus.REVIEW,
     )
-    db.add(creative)
-    set_status(deal, DealStatus.CREATIVE_REVIEW)
-    log_event(db, deal.id, "CREATIVE_SUBMITTED", {"version": version})
-    db.commit()
-    db.refresh(creative)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: creative drafted v{version}.")
-    _send_creative_to_advertiser(deal, creative, db.get(User, deal.advertiser_id))
-    return CreativeOut.model_validate(creative)
+    try:
+        db.add(creative)
+        set_status(deal, DealStatus.CREATIVE_REVIEW)
+        log_event(db, deal.id, "CREATIVE_SUBMITTED", {"version": version})
+        db.commit()
+        db.refresh(creative)
+        _notify_deal_parties(db, deal, f"Deal #{deal.id}: creative drafted v{version}.")
+        _send_creative_to_advertiser(deal, creative, db.get(User, deal.advertiser_id))
+        logger.info("bot_create_creative: success deal_id=%s version=%s", deal_id, version)
+        return CreativeOut.model_validate(creative)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("bot_create_creative: error deal_id=%s", deal_id)
+        raise
 
 
 @router.post(
@@ -582,57 +702,76 @@ def bot_add_event(
 
 @router.post("/tamper", dependencies=[Depends(get_bot_secret)])
 def bot_mark_tamper(payload: TamperRequest, db: Session = Depends(get_db)) -> dict:
+    logger.info("tamper request: channel_tg_chat_id=%s message_id=%s", payload.channel_tg_chat_id, payload.message_id)
     channel = db.query(Channel).filter(Channel.tg_chat_id == payload.channel_tg_chat_id).first()
     if not channel:
+        logger.warning("tamper: channel not found for tg_chat_id=%s", payload.channel_tg_chat_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     deal = db.query(Deal).filter(Deal.channel_id == channel.id, Deal.posted_message_id == payload.message_id).first()
     if not deal:
+        logger.warning("tamper: deal not found for channel_id=%s message_id=%s", channel.id, payload.message_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     deal.tampered = True
     log_event(db, deal.id, "POST_TAMPERED", {"message_id": payload.message_id})
     db.commit()
+    logger.info("tamper: deal_id=%s marked as tampered", deal.id)
     return {"status": "ok"}
 
 
 @router.post("/deleted", dependencies=[Depends(get_bot_secret)])
 def bot_mark_deleted(payload: TamperRequest, db: Session = Depends(get_db)) -> dict:
+    logger.info("deleted request: channel_tg_chat_id=%s message_id=%s", payload.channel_tg_chat_id, payload.message_id)
     channel = db.query(Channel).filter(Channel.tg_chat_id == payload.channel_tg_chat_id).first()
     if not channel:
+        logger.warning("deleted: channel not found for tg_chat_id=%s", payload.channel_tg_chat_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     deal = db.query(Deal).filter(Deal.channel_id == channel.id, Deal.posted_message_id == payload.message_id).first()
     if not deal:
+        logger.warning("deleted: deal not found for channel_id=%s message_id=%s", channel.id, payload.message_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    deal.deleted = True
-    log_event(db, deal.id, "POST_DELETED", {"message_id": payload.message_id})
-    db.commit()
-    return {"status": "ok"}
+    try:
+        deal.deleted = True
+        log_event(db, deal.id, "POST_DELETED", {"message_id": payload.message_id})
+        db.commit()
+        logger.info("deleted: deal_id=%s marked as deleted", deal.id)
+        return {"status": "ok"}
+    except Exception:
+        logger.exception("deleted: error deal_id=%s", deal.id)
+        raise
 
 
 @router.post("/channels", dependencies=[Depends(get_bot_secret)])
 def bot_create_channel(payload: BotChannelCreate, db: Session = Depends(get_db)) -> dict:
-    user = db.query(User).filter(User.tg_user_id == payload.owner_tg_user_id).first()
-    if not user:
-        user = User(tg_user_id=payload.owner_tg_user_id, roles=["owner"])
-        db.add(user)
+    try:
+        user = db.query(User).filter(User.tg_user_id == payload.owner_tg_user_id).first()
+        if not user:
+            user = User(tg_user_id=payload.owner_tg_user_id, roles=["owner"])
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info("bot_create_channel: created user tg_user_id=%s", payload.owner_tg_user_id)
+        existing = db.query(Channel).filter(Channel.tg_chat_id == payload.tg_chat_id).first()
+        if existing:
+            existing.username = payload.username
+            existing.title = payload.title
+            existing.bot_admin_status = bool(payload.bot_admin_status)
+            existing.rights_snapshot = payload.rights_snapshot
+            db.commit()
+            logger.info("bot_create_channel: updated channel_id=%s tg_chat_id=%s", existing.id, payload.tg_chat_id)
+            return {"status": "updated", "channel_id": existing.id}
+        channel = Channel(
+            tg_chat_id=payload.tg_chat_id,
+            username=payload.username,
+            title=payload.title,
+            owner_user_id=user.id,
+            bot_admin_status=bool(payload.bot_admin_status),
+            rights_snapshot=payload.rights_snapshot,
+        )
+        db.add(channel)
         db.commit()
-        db.refresh(user)
-    existing = db.query(Channel).filter(Channel.tg_chat_id == payload.tg_chat_id).first()
-    if existing:
-        existing.username = payload.username
-        existing.title = payload.title
-        existing.bot_admin_status = bool(payload.bot_admin_status)
-        existing.rights_snapshot = payload.rights_snapshot
-        db.commit()
-        return {"status": "updated", "channel_id": existing.id}
-    channel = Channel(
-        tg_chat_id=payload.tg_chat_id,
-        username=payload.username,
-        title=payload.title,
-        owner_user_id=user.id,
-        bot_admin_status=bool(payload.bot_admin_status),
-        rights_snapshot=payload.rights_snapshot,
-    )
-    db.add(channel)
-    db.commit()
-    db.refresh(channel)
-    return {"status": "created", "channel_id": channel.id}
+        db.refresh(channel)
+        logger.info("bot_create_channel: created channel_id=%s tg_chat_id=%s", channel.id, payload.tg_chat_id)
+        return {"status": "created", "channel_id": channel.id}
+    except Exception:
+        logger.exception("bot_create_channel: error tg_chat_id=%s", payload.tg_chat_id)
+        raise

@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from tonsdk.utils import Address, bytes_to_b64str, to_nano
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _toncenter_root_url() -> str:
@@ -521,10 +524,15 @@ def derive_deposit_key(deal_id: int) -> str:
 
 
 def create_deposit_wallet(deal_id: int) -> tuple[str, str]:
-    mnemonics, _, _, wallet = Wallets.create(WalletVersionEnum.v4r2, 0)
-    deposit_key = " ".join(mnemonics)
-    deposit_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
-    return deposit_address, deposit_key
+    try:
+        mnemonics, _, _, wallet = Wallets.create(WalletVersionEnum.v4r2, 0)
+        deposit_key = " ".join(mnemonics)
+        deposit_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        logger.info("create_deposit_wallet: deal_id=%s address=%s", deal_id, deposit_address)
+        return deposit_address, deposit_key
+    except Exception:
+        logger.exception("create_deposit_wallet: error deal_id=%s", deal_id)
+        raise
 
 
 def find_incoming_tx(
@@ -532,8 +540,10 @@ def find_incoming_tx(
     expected_amount: float | None,
     expected_comment: str | None,
 ) -> str | None:
+    logger.info("find_incoming_tx: address=%s expected_amount=%s", deposit_address, expected_amount)
     txs = _toncenter_transactions(deposit_address, 20)
     if not isinstance(txs, list):
+        logger.warning("find_incoming_tx: no transactions for address=%s", deposit_address)
         return None
     expected_nano = _amount_to_nano(expected_amount) if expected_amount is not None else None
     for tx in txs:
@@ -563,6 +573,7 @@ def find_incoming_tx(
 
 
 def send_payout(deposit_key: str, payout_address: str, amount: float | None) -> str:
+    logger.info("send_payout: to=%s amount=%s", payout_address, amount)
     if _is_wallet_v5_version():
         wallet = _wallet_from_key(deposit_key)
         wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
@@ -580,6 +591,7 @@ def send_payout(deposit_key: str, payout_address: str, amount: float | None) -> 
 
 
 def send_refund(deposit_key: str, refund_address: str, amount: float | None) -> str:
+    logger.info("send_refund: to=%s amount=%s", refund_address, amount)
     if _is_wallet_v5_version():
         wallet = _wallet_from_key(deposit_key)
         wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())

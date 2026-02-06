@@ -1,11 +1,26 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import auth, bot_actions, channels, deals, escrow, listings, requests, stats
 from app.core.config import settings
 from app.services import ton_escrow
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title=settings.app_name)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,4 +42,9 @@ app.include_router(bot_actions.router, prefix="/bot", tags=["bot"])
 
 @app.on_event("startup")
 def validate_escrow_secret_key() -> None:
-    ton_escrow.ensure_escrow_secret_key()
+    try:
+        ton_escrow.ensure_escrow_secret_key()
+        logger.info("escrow secret key validated")
+    except Exception:
+        logger.exception("failed to validate escrow secret key")
+        raise

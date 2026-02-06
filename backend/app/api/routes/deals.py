@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.models.enums import DealStatus
 from app.schemas.deal import DealCreate, DealOut
 from app.services.deal_service import log_event
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -42,24 +45,31 @@ def create_deal(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
         advertiser_id = request_item.advertiser_id
         channel_id = channel.id
-    deal = Deal(
-        listing_id=payload.listing_id,
-        request_id=payload.request_id,
-        advertiser_id=advertiser_id,
-        channel_id=channel_id,
-        price=payload.price,
-        format=payload.format,
-        brief=payload.brief,
-        publish_at=payload.publish_at,
-        verification_window=payload.verification_window,
-        status=DealStatus.NEGOTIATING,
-    )
-    db.add(deal)
-    db.commit()
-    db.refresh(deal)
-    log_event(db, deal.id, "DEAL_CREATED")
-    db.commit()
-    return DealOut.model_validate(deal)
+    try:
+        deal = Deal(
+            listing_id=payload.listing_id,
+            request_id=payload.request_id,
+            advertiser_id=advertiser_id,
+            channel_id=channel_id,
+            price=payload.price,
+            format=payload.format,
+            brief=payload.brief,
+            publish_at=payload.publish_at,
+            verification_window=payload.verification_window,
+            status=DealStatus.NEGOTIATING,
+        )
+        db.add(deal)
+        db.commit()
+        db.refresh(deal)
+        log_event(db, deal.id, "DEAL_CREATED")
+        db.commit()
+        logger.info("create_deal: success deal_id=%s user_id=%s", deal.id, user.id)
+        return DealOut.model_validate(deal)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("create_deal: error user_id=%s", user.id)
+        raise
 
 
 @router.get("/", response_model=list[DealOut])

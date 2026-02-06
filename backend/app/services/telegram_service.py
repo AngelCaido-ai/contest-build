@@ -1,29 +1,44 @@
+import logging
+
 import requests
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 def _post(method: str, payload: dict) -> dict | None:
     if not settings.bot_token:
+        logger.warning("telegram _post: bot_token not configured, skip %s", method)
         return None
     url = f"https://api.telegram.org/bot{settings.bot_token}/{method}"
-    resp = requests.post(url, json=payload)
-    if not resp.ok:
+    try:
+        resp = requests.post(url, json=payload)
+        if not resp.ok:
+            logger.warning("telegram %s: http %s body=%s", method, resp.status_code, resp.text[:200])
+            return None
+        data = resp.json()
+        if not data.get("ok"):
+            logger.warning("telegram %s: api error %s", method, data.get("description"))
+            return None
+        return data.get("result")
+    except Exception:
+        logger.exception("telegram %s: request error", method)
         return None
-    data = resp.json()
-    if not data.get("ok"):
-        return None
-    return data.get("result")
 
 
 def send_message(chat_id: int, text: str, reply_markup: dict | None = None) -> int | None:
+    logger.info("send_message: chat_id=%s", chat_id)
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
         payload["reply_markup"] = reply_markup
     result = _post("sendMessage", payload)
     if not result:
+        logger.warning("send_message: failed chat_id=%s", chat_id)
         return None
-    return result.get("message_id")
+    message_id = result.get("message_id")
+    logger.info("send_message: success chat_id=%s message_id=%s", chat_id, message_id)
+    return message_id
 
 
 def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[str] | None) -> int | None:
@@ -87,13 +102,22 @@ def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[st
 
 def copy_message(from_chat_id: int, message_id: int, to_chat_id: int) -> bool:
     if not settings.bot_token:
+        logger.warning("copy_message: bot_token not configured")
         return False
     url = f"https://api.telegram.org/bot{settings.bot_token}/copyMessage"
-    resp = requests.post(
-        url,
-        json={"from_chat_id": from_chat_id, "message_id": message_id, "chat_id": to_chat_id},
-    )
-    if not resp.ok:
+    try:
+        resp = requests.post(
+            url,
+            json={"from_chat_id": from_chat_id, "message_id": message_id, "chat_id": to_chat_id},
+        )
+        if not resp.ok:
+            logger.warning("copy_message: http %s from=%s msg=%s", resp.status_code, from_chat_id, message_id)
+            return False
+        data = resp.json()
+        ok = bool(data.get("ok"))
+        if ok:
+            logger.info("copy_message: success from=%s msg=%s to=%s", from_chat_id, message_id, to_chat_id)
+        return ok
+    except Exception:
+        logger.exception("copy_message: error from=%s msg=%s", from_chat_id, message_id)
         return False
-    data = resp.json()
-    return bool(data.get("ok"))

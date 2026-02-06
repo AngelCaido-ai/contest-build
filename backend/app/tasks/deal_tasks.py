@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -12,29 +13,45 @@ from app.services.deal_service import log_event, set_status
 from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments
 from app.services.telegram_service import copy_message, send_media, send_message
 
+logger = logging.getLogger(__name__)
+
 
 def check_payment_timeouts() -> None:
+    logger.info("check_payment_timeouts: start")
     db: Session = SessionLocal()
     try:
         cutoff = datetime.utcnow() - timedelta(minutes=settings.payment_timeout_minutes)
         deals = db.query(Deal).filter(Deal.status == DealStatus.AWAITING_PAYMENT, Deal.updated_at < cutoff).all()
+        logger.info("check_payment_timeouts: found %d expired deals", len(deals))
         for deal in deals:
-            set_status(deal, DealStatus.CANCELED)
-            log_event(db, deal.id, "PAYMENT_TIMEOUT")
+            try:
+                set_status(deal, DealStatus.CANCELED)
+                log_event(db, deal.id, "PAYMENT_TIMEOUT")
+                logger.info("check_payment_timeouts: canceled deal_id=%s", deal.id)
+            except Exception:
+                logger.exception("check_payment_timeouts: error canceling deal_id=%s", deal.id)
         db.commit()
+        logger.info("check_payment_timeouts: done")
+    except Exception:
+        logger.exception("check_payment_timeouts: error")
     finally:
         db.close()
 
 
 def scan_escrow_deposits() -> None:
+    logger.info("scan_escrow_deposits: start")
     db: Session = SessionLocal()
     try:
-        scan_incoming_payments(db)
+        count = scan_incoming_payments(db)
+        logger.info("scan_escrow_deposits: processed %d payments", count)
+    except Exception:
+        logger.exception("scan_escrow_deposits: error")
     finally:
         db.close()
 
 
 def process_scheduled_posts() -> None:
+    logger.info("process_scheduled_posts: start")
     db: Session = SessionLocal()
     try:
         now = datetime.utcnow()
@@ -43,27 +60,37 @@ def process_scheduled_posts() -> None:
             .filter(Deal.status.in_([DealStatus.APPROVED, DealStatus.SCHEDULED]), Deal.publish_at <= now)
             .all()
         )
+        logger.info("process_scheduled_posts: found %d deals to publish", len(deals))
         for deal in deals:
-            channel = db.get(Channel, deal.channel_id)
-            creative = (
-                db.query(Creative)
-                .filter(Creative.deal_id == deal.id)
-                .order_by(Creative.version.desc())
-                .first()
-            )
-            if not channel or not creative or (not creative.text and not creative.media_file_ids):
-                continue
-            message_id = send_media(channel.tg_chat_id, creative.text, creative.media_file_ids)
-            if not message_id and creative.text:
-                message_id = send_message(channel.tg_chat_id, creative.text)
-            if not message_id:
-                continue
-            deal.posted_message_id = message_id
-            deal.posted_at = now
-            deal.verification_started_at = now
-            set_status(deal, DealStatus.VERIFYING)
-            log_event(db, deal.id, "POSTED", {"message_id": message_id})
+            try:
+                channel = db.get(Channel, deal.channel_id)
+                creative = (
+                    db.query(Creative)
+                    .filter(Creative.deal_id == deal.id)
+                    .order_by(Creative.version.desc())
+                    .first()
+                )
+                if not channel or not creative or (not creative.text and not creative.media_file_ids):
+                    logger.warning("process_scheduled_posts: skip deal_id=%s (no channel/creative)", deal.id)
+                    continue
+                message_id = send_media(channel.tg_chat_id, creative.text, creative.media_file_ids)
+                if not message_id and creative.text:
+                    message_id = send_message(channel.tg_chat_id, creative.text)
+                if not message_id:
+                    logger.warning("process_scheduled_posts: failed to post deal_id=%s", deal.id)
+                    continue
+                deal.posted_message_id = message_id
+                deal.posted_at = now
+                deal.verification_started_at = now
+                set_status(deal, DealStatus.VERIFYING)
+                log_event(db, deal.id, "POSTED", {"message_id": message_id})
+                logger.info("process_scheduled_posts: posted deal_id=%s message_id=%s", deal.id, message_id)
+            except Exception:
+                logger.exception("process_scheduled_posts: error posting deal_id=%s", deal.id)
         db.commit()
+        logger.info("process_scheduled_posts: done")
+    except Exception:
+        logger.exception("process_scheduled_posts: error")
     finally:
         db.close()
 
@@ -71,27 +98,38 @@ def process_scheduled_posts() -> None:
 def check_deleted_posts() -> None:
     if settings.bot_log_chat_id is None:
         return
+    logger.info("check_deleted_posts: start")
     db: Session = SessionLocal()
     try:
         deals = db.query(Deal).filter(Deal.status == DealStatus.VERIFYING, Deal.posted_message_id.isnot(None)).all()
+        logger.info("check_deleted_posts: checking %d deals", len(deals))
         for deal in deals:
-            channel = db.get(Channel, deal.channel_id)
-            if not channel:
-                continue
-            ok = copy_message(channel.tg_chat_id, int(deal.posted_message_id), settings.bot_log_chat_id)
-            if not ok:
-                deal.deleted = True
-                log_event(db, deal.id, "POST_DELETED", {"message_id": deal.posted_message_id})
+            try:
+                channel = db.get(Channel, deal.channel_id)
+                if not channel:
+                    continue
+                ok = copy_message(channel.tg_chat_id, int(deal.posted_message_id), settings.bot_log_chat_id)
+                if not ok:
+                    deal.deleted = True
+                    log_event(db, deal.id, "POST_DELETED", {"message_id": deal.posted_message_id})
+                    logger.info("check_deleted_posts: deal_id=%s marked as deleted", deal.id)
+            except Exception:
+                logger.exception("check_deleted_posts: error checking deal_id=%s", deal.id)
         db.commit()
+        logger.info("check_deleted_posts: done")
+    except Exception:
+        logger.exception("check_deleted_posts: error")
     finally:
         db.close()
 
 
 def check_verification_windows() -> None:
+    logger.info("check_verification_windows: start")
     db: Session = SessionLocal()
     try:
         now = datetime.utcnow()
         deals = db.query(Deal).filter(Deal.status == DealStatus.VERIFYING).all()
+        logger.info("check_verification_windows: checking %d deals", len(deals))
         for deal in deals:
             window = deal.verification_window or settings.verification_window_minutes
             start = deal.verification_started_at or deal.posted_at
@@ -102,13 +140,24 @@ def check_verification_windows() -> None:
             if deal.tampered or deal.deleted:
                 try:
                     refund_payment(db, deal, None, "verification_failed")
+                    logger.info("check_verification_windows: refunded deal_id=%s", deal.id)
                 except ValueError as exc:
                     log_event(db, deal.id, "ESCROW_REFUND_FAILED", {"error": str(exc)})
+                    logger.warning("check_verification_windows: refund failed deal_id=%s error=%s", deal.id, exc)
+                except Exception:
+                    logger.exception("check_verification_windows: refund error deal_id=%s", deal.id)
             else:
                 try:
                     release_payment(db, deal, None)
+                    logger.info("check_verification_windows: released deal_id=%s", deal.id)
                 except ValueError as exc:
                     log_event(db, deal.id, "ESCROW_RELEASE_FAILED", {"error": str(exc)})
+                    logger.warning("check_verification_windows: release failed deal_id=%s error=%s", deal.id, exc)
+                except Exception:
+                    logger.exception("check_verification_windows: release error deal_id=%s", deal.id)
         db.commit()
+        logger.info("check_verification_windows: done")
+    except Exception:
+        logger.exception("check_verification_windows: error")
     finally:
         db.close()
