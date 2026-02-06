@@ -1,6 +1,7 @@
 # Дневник изменений
 
 ## backend
+- 2026-02-06: Исправлен расчёт минимальной суммы депозита при Decimal значениях цены и резерва.
 - 2026-02-06: Централизованное логирование и обработка исключений: настроен logging.basicConfig в main.py, добавлен глобальный exception_handler для необработанных ошибок.
 - 2026-02-06: Все API-роуты (auth, channels, deals, escrow, listings, requests, bot_actions) обёрнуты в try/except с логированием ошибок и успешных операций.
 - 2026-02-06: Все backend-сервисы (deal_service, escrow_service, telegram_service, ton_escrow) получили логирование ключевых операций (создание депозита, подтверждение оплаты, release/refund, отправка сообщений в Telegram, создание кошельков).
@@ -50,6 +51,8 @@
 - 2026-01-27: Интеграционный тест проверяет seqno и исходящую транзакцию.
 
 ## bot
+- 2026-02-06: Добавлен fallback для правок через channel_post с edit_date и включён channel_post в allowed_updates.
+- 2026-02-06: В polling добавлено явное включение edited_channel_post и edited_message для фиксации правок постов.
 - 2026-02-06: Все bot-хендлеры (start, onboarding, deals, marketplace, channel_posts) получили логирование через logging.getLogger.
 - 2026-02-06: api_client полностью обёрнут в try/except с логированием каждого API-вызова (входящий запрос, успех, ошибка).
 - 2026-02-06: Добавлена обработка ошибок в /add_channel с выводом сообщения пользователю при сбое.

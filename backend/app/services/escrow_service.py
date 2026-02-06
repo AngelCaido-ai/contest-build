@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -18,11 +19,16 @@ logger = logging.getLogger(__name__)
 def create_deposit(db: Session, deal: Deal, expected_amount: float | None) -> EscrowPayment:
     logger.info("create_deposit: start deal_id=%s expected_amount=%s", deal.id, expected_amount)
     try:
-        reserve = settings.ton_reserve_ton or 0
+        reserve = Decimal(str(settings.ton_reserve_ton or 0))
         deal_price = deal.price or 0
+        if not isinstance(deal_price, Decimal):
+            deal_price = Decimal(str(deal_price))
         min_amount = deal_price + reserve
-        if expected_amount is None or expected_amount < min_amount:
-            expected_amount = min_amount
+        normalized_expected = expected_amount
+        if normalized_expected is not None and not isinstance(normalized_expected, Decimal):
+            normalized_expected = Decimal(str(normalized_expected))
+        if normalized_expected is None or normalized_expected < min_amount:
+            normalized_expected = min_amount
         deposit_address, deposit_key = ton_escrow.create_deposit_wallet(deal.id)
         deposit_key = ton_escrow.encrypt_deposit_key(deposit_key)
         deposit_comment = ton_escrow.build_deposit_comment(deal.id)
@@ -31,7 +37,7 @@ def create_deposit(db: Session, deal: Deal, expected_amount: float | None) -> Es
             deposit_address=deposit_address,
             deposit_key=deposit_key,
             deposit_comment=deposit_comment,
-            expected_amount=expected_amount,
+            expected_amount=normalized_expected,
         )
         db.add(payment)
         set_status(deal, DealStatus.AWAITING_PAYMENT)

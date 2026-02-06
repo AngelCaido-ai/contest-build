@@ -45,3 +45,10 @@ async def on_edited_channel_post(message: Message) -> None:
 @router.edited_message()
 async def on_edited_message(message: Message) -> None:
     await _handle_edit(message)
+
+
+@router.channel_post()
+async def on_channel_post(message: Message) -> None:
+    if not message.edit_date:
+        return
+    await _handle_edit(message)

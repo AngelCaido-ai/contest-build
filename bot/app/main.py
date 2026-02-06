@@ -33,6 +33,7 @@ async def main() -> None:
 
         await bot.delete_webhook(drop_pending_updates=True)
         allowed_updates = dp.resolve_used_update_types()
+        allowed_updates = sorted(set(allowed_updates) | {"edited_channel_post", "edited_message", "channel_post"})
         logger.info(f"Allowed updates: {allowed_updates}")
         logger.info("Starting polling...")
         await dp.start_polling(bot, allowed_updates=allowed_updates)
