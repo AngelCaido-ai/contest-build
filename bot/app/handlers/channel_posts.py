@@ -11,8 +11,10 @@ router = Router()
 
 async def _handle_edit(message: Message) -> None:
     if not message.chat or not message.message_id:
+        logger.info('handle edit by not message.chat', message)
         return
     if message.chat.type not in {"channel", "supergroup", "group"}:
+        logger.info('handle edit by message.chat.type not in', message)
         return
     logger.info(
         "edit detected: chat_id=%s message_id=%s chat_type=%s",
