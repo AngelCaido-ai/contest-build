@@ -381,6 +381,25 @@ async def _prompt_wallet(message: Message) -> None:
     )
 
 
+async def _check_wallet(message: Message, tg_user_id: int) -> bool:
+    try:
+        data = api_client.auth_bot(tg_user_id)
+        user = data.get("user") or {}
+        if user.get("linked_wallet"):
+            return True
+    except Exception:
+        logger.exception("_check_wallet: failed for tg_user_id=%s", tg_user_id)
+        return True
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Link wallet", callback_data=MENU_WALLET)
+    builder.adjust(1)
+    await message.answer(
+        "To create a listing, you need to link your TON wallet first.",
+        reply_markup=builder.as_markup(),
+    )
+    return False
+
+
 async def _prompt_listing_channel_select(message: Message, tg_user_id: int) -> None:
     try:
         items = api_client.list_channels(tg_user_id)
@@ -953,6 +972,8 @@ async def create_request(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("create_listing"))
 async def create_listing(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not await _check_wallet(message, message.from_user.id):
+        return
     parts = (message.text or "").split()
     if len(parts) < 2:
         await state.set_state(ListingCreateState.channel_id)
@@ -1080,6 +1101,9 @@ async def deals_active_clear(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == MENU_CREATE_LISTING)
 async def menu_create_listing(callback: CallbackQuery, state: FSMContext) -> None:
+    if callback.message and not await _check_wallet(callback.message, callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(ListingCreateState.channel_id)
     if callback.message:
         await _prompt_listing_channel_select(callback.message, callback.from_user.id)

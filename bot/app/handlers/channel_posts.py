@@ -14,25 +14,29 @@ async def _handle_edit(message: Message) -> None:
         return
     if message.chat.type not in {"channel", "supergroup", "group"}:
         return
+    channel_id = message.chat.id
+    if message.sender_chat and message.sender_chat.id:
+        channel_id = message.sender_chat.id
     logger.info(
-        "edit detected: chat_id=%s message_id=%s chat_type=%s",
+        "edit detected: chat_id=%s sender_chat_id=%s message_id=%s chat_type=%s",
         message.chat.id,
+        message.sender_chat.id if message.sender_chat else None,
         message.message_id,
         message.chat.type,
     )
     try:
-        api_client.mark_tamper(message.chat.id, message.message_id)
+        api_client.mark_tamper(channel_id, message.message_id)
     except Exception as exc:
         logger.error(
             "mark_tamper failed: chat_id=%s message_id=%s error=%s",
-            message.chat.id,
+            channel_id,
             message.message_id,
             exc,
         )
         return
     logger.info(
         "mark_tamper ok: chat_id=%s message_id=%s",
-        message.chat.id,
+        channel_id,
         message.message_id,
     )
 

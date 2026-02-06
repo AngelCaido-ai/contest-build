@@ -51,6 +51,7 @@
 - 2026-01-27: Интеграционный тест проверяет seqno и исходящую транзакцию.
 
 ## bot
+- 2026-02-06: Для tamper detection добавлен sender_chat id как источник channel_tg_chat_id.
 - 2026-02-06: Добавлен fallback для правок через channel_post с edit_date и включён channel_post в allowed_updates.
 - 2026-02-06: В polling добавлено явное включение edited_channel_post и edited_message для фиксации правок постов.
 - 2026-02-06: Все bot-хендлеры (start, onboarding, deals, marketplace, channel_posts) получили логирование через logging.getLogger.

@@ -66,7 +66,7 @@ bot/
 
 ### `channel_posts.py` — Мониторинг правок
 
-Обрабатывает `edited_channel_post` и `edited_message`. Также использует `channel_post` с `edit_date` как fallback. При редактировании поста в канале вызывает `api_client.mark_tamper` для фиксации факта изменения.
+Обрабатывает `edited_channel_post` и `edited_message`. Также использует `channel_post` с `edit_date` как fallback. При наличии `sender_chat` использует его `id` как идентификатор канала (сценарий связанной дискуссионной группы). При редактировании поста в канале вызывает `api_client.mark_tamper` для фиксации факта изменения.
 
 ---
 
