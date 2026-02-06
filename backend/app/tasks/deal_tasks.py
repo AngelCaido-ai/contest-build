@@ -11,7 +11,7 @@ from app.models.deal import Deal
 from app.models.enums import DealStatus
 from app.services.deal_service import log_event, set_status
 from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments
-from app.services.telegram_service import check_message_tampered, copy_message, send_media, send_message
+from app.services.telegram_service import copy_message, send_media, send_message
 
 logger = logging.getLogger(__name__)
 
@@ -91,56 +91,6 @@ def process_scheduled_posts() -> None:
         logger.info("process_scheduled_posts: done")
     except Exception:
         logger.exception("process_scheduled_posts: error")
-    finally:
-        db.close()
-
-
-def check_tampered_posts() -> None:
-    logger.info("check_tampered_posts: start")
-    db: Session = SessionLocal()
-    try:
-        deals = (
-            db.query(Deal)
-            .filter(
-                Deal.status == DealStatus.VERIFYING,
-                Deal.posted_message_id.isnot(None),
-                Deal.tampered.is_(False),
-            )
-            .all()
-        )
-        logger.info("check_tampered_posts: checking %d deals", len(deals))
-        for deal in deals:
-            try:
-                channel = db.get(Channel, deal.channel_id)
-                if not channel:
-                    continue
-                creative = (
-                    db.query(Creative)
-                    .filter(Creative.deal_id == deal.id)
-                    .order_by(Creative.version.desc())
-                    .first()
-                )
-                if not creative:
-                    continue
-                has_media = bool(creative.media_file_ids)
-                result = check_message_tampered(
-                    channel.tg_chat_id,
-                    int(deal.posted_message_id),
-                    creative.text,
-                    has_media,
-                )
-                if result is True:
-                    deal.tampered = True
-                    log_event(db, deal.id, "POST_TAMPERED", {"message_id": deal.posted_message_id})
-                    logger.info("check_tampered_posts: deal_id=%s marked as tampered", deal.id)
-                elif result is False:
-                    logger.debug("check_tampered_posts: deal_id=%s not tampered", deal.id)
-            except Exception:
-                logger.exception("check_tampered_posts: error checking deal_id=%s", deal.id)
-        db.commit()
-        logger.info("check_tampered_posts: done")
-    except Exception:
-        logger.exception("check_tampered_posts: error")
     finally:
         db.close()
 

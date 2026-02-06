@@ -3,13 +3,12 @@
 Формат записи: дата — изменение — причина/контекст.
 
 ## 2026-02-06
-- Добавлена серверная проверка tamper (`check_tampered_posts`) через Bot API (`editMessageText`/`editMessageCaption`) — причина: Telegram не доставляет `edited_channel_post` обновления боту, серверная проверка через воркер надёжнее polling.
-- Обновлена документация `backend` (`docs/backend.md`) — причина: зафиксировать `check_tampered_posts` и `check_message_tampered`.
+- Реализован watcher-бот (отдельный Telegram-бот) для надёжного отслеживания правок постов — причина: Bot API не доставляет `edited_channel_post` боту-автору поста, второй бот решает проблему.
+- Удалён костыль `check_tampered_posts` (editMessageText/editMessageCaption) из scheduler/worker — причина: заменён watcher-ботом.
+- Удалены `channel_posts` хендлеры и `UpdateLogMiddleware` из основного бота — причина: tamper detection перенесён в watcher.
+- Создана документация модуля `watcher` (`docs/watcher.md`).
 - Создана документация модуля `backend` (`docs/backend.md`) — причина: зафиксировать структуру, модели, API-эндпоинты, сервисы, escrow-флоу, фоновые задачи и конфигурацию.
 - Создана документация модуля `bot` (`docs/bot.md`) — причина: зафиксировать структуру, команды, FSM-состояния, callback-схему, API-клиент и workflow сделок.
-- Обновлена документация `bot` (`docs/bot.md`) — причина: зафиксировать явное включение edited-обновлений в polling.
-- Обновлена документация `bot` (`docs/bot.md`) — причина: зафиксировать fallback для channel_post с edit_date.
-- Обновлена документация `bot` (`docs/bot.md`) — причина: зафиксировать использование sender_chat id для tamper detection.
 
 ## 2026-01-23
 - Создана структура монорепо (`backend/`, `bot/`, `miniapp/`, `infra/`) — причина: разделить сервисы и упростить навигацию.

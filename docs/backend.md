@@ -438,7 +438,6 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 - `send_message(chat_id, text, reply_markup)` — отправка текстового сообщения
 - `send_media(chat_id, text, media_items)` — отправка медиа (photo/video/document/animation, группа или одиночное)
-- `check_message_tampered(chat_id, message_id, original_text, has_media)` — серверная проверка изменения поста: пытается `editMessageText`/`editMessageCaption` с оригинальным контентом; возвращает `True` (изменён), `False` (не изменён), `None` (ошибка)
 - `copy_message(from_chat_id, message_id, to_chat_id)` — копирование сообщения (для проверки удалённых постов)
 
 ---
@@ -452,7 +451,6 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `check_payment_timeouts` | Отмена сделок в статусе `AWAITING_PAYMENT`, если прошло больше `PAYMENT_TIMEOUT_MINUTES` |
 | `scan_escrow_deposits` | Сканирование блокчейна на входящие транзакции для ожидающих депозитов |
 | `process_scheduled_posts` | Публикация постов в каналы для сделок с `publish_at ≤ now` и статусом `APPROVED`/`SCHEDULED` |
-| `check_tampered_posts` | Серверная проверка изменения постов через `editMessageText`/`editMessageCaption` с оригинальным контентом креатива |
 | `check_deleted_posts` | Проверка удалённых постов через `copyMessage` в лог-чат |
 | `check_verification_windows` | По истечении окна верификации: `release` если пост цел, `refund` если изменён/удалён |
 
@@ -466,12 +464,14 @@ RQ worker (`SimpleWorker` с `TimerDeathPenalty` для Windows). Подключ
 
 ### `worker/scheduler.py`
 
-Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд:
+Бесконечный цикл, ставит 5 задач в очередь каждые 20 секунд:
 
 ```
 check_payment_timeouts → scan_escrow_deposits → process_scheduled_posts →
-check_tampered_posts → check_deleted_posts → check_verification_windows → sleep(20) → повтор
+check_deleted_posts → check_verification_windows → sleep(20) → повтор
 ```
+
+> Tamper detection выполняется отдельным watcher-ботом (см. `docs/watcher.md`).
 
 ---
 

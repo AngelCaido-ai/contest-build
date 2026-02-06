@@ -1,8 +1,9 @@
 # Дневник изменений
 
 ## backend
+- 2026-02-06: Удалён костыль check_tampered_posts (editMessageText/editMessageCaption) — заменён watcher ботом.
+- 2026-02-06: Удалена функция check_message_tampered из telegram_service.
 - 2026-02-06: Добавлен эндпоинт /bot/test-deal для создания тестовой сделки (SCHEDULED, креатив "testtest", publish через 2 мин, verification_window 10 мин).
-- 2026-02-06: Добавлена серверная проверка tamper через editMessageText/editMessageCaption (check_tampered_posts), не зависящая от polling обновлений бота.
 - 2026-02-06: Исправлен расчёт минимальной суммы депозита при Decimal значениях цены и резерва.
 - 2026-02-06: Централизованное логирование и обработка исключений: настроен logging.basicConfig в main.py, добавлен глобальный exception_handler для необработанных ошибок.
 - 2026-02-06: Все API-роуты (auth, channels, deals, escrow, listings, requests, bot_actions) обёрнуты в try/except с логированием ошибок и успешных операций.
@@ -53,10 +54,13 @@
 - 2026-01-27: Интеграционный тест проверяет seqno и исходящую транзакцию.
 
 ## bot
+- 2026-02-06: Удалены channel_posts хендлеры и UpdateLogMiddleware из основного бота — tamper detection перенесён в watcher.
 - 2026-02-06: Добавлена команда /test_deal для быстрого создания тестовой сделки с постом через 2 мин.
-- 2026-02-06: Для tamper detection добавлен sender_chat id как источник channel_tg_chat_id.
-- 2026-02-06: Добавлен fallback для правок через channel_post с edit_date и включён channel_post в allowed_updates.
-- 2026-02-06: В polling добавлено явное включение edited_channel_post и edited_message для фиксации правок постов.
+
+## watcher
+- 2026-02-06: Создан модуль watcher — отдельный Telegram-бот для отслеживания правок постов в каналах.
+- 2026-02-06: Watcher слушает edited_channel_post, edited_message, channel_post и вызывает /bot/tamper при обнаружении правки.
+- 2026-02-06: Добавлен сервис watcher в docker-compose.yml с переменной WATCHER_BOT_TOKEN.
 - 2026-02-06: Все bot-хендлеры (start, onboarding, deals, marketplace, channel_posts) получили логирование через logging.getLogger.
 - 2026-02-06: api_client полностью обёрнут в try/except с логированием каждого API-вызова (входящий запрос, успех, ошибка).
 - 2026-02-06: Добавлена обработка ошибок в /add_channel с выводом сообщения пользователю при сбое.
@@ -105,6 +109,7 @@
 - 2026-01-27: Добавлен Dockerfile и сервис miniapp для запуска Vite dev server.
 
 ## infra
+- 2026-02-06: Добавлен сервис watcher в docker-compose и COPY watcher в Dockerfile.
 - 2026-01-27: docker-compose расширен на все сервисы, добавлены healthcheck и зависимости.
 - 2026-01-27: Добавлена проверка BOT_TOKEN перед запуском контейнера бота.
 - 2026-01-27: docker-compose читает переменные из `.env` и `env`.

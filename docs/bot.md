@@ -16,8 +16,7 @@ bot/
 │   │   ├── start.py           # /start — регистрация пользователя
 │   │   ├── onboarding.py      # /add_channel — привязка канала
 │   │   ├── marketplace.py     # Маркетплейс: листинги, заявки, меню, сделки (список), менеджеры, кошелёк
-│   │   ├── deals.py           # Управление отдельной сделкой: условия, статус, креатив, эскроу
-│   │   └── channel_posts.py   # Отслеживание правок в каналах (tamper detection)
+│   │   └── deals.py           # Управление отдельной сделкой: условия, статус, креатив, эскроу
 │   └── services/
 │       ├── __init__.py
 │       └── api_client.py      # Синхронный HTTP-клиент к backend API
@@ -44,9 +43,10 @@ bot/
 Функция `main()`:
 1. Создаёт экземпляр `Bot` и проверяет подключение (`get_me`).
 2. Создаёт `Dispatcher` с `MemoryStorage` для FSM.
-3. Подключает роутеры в порядке: `start` → `onboarding` → `marketplace` → `deals` → `channel_posts`.
-4. Формирует `allowed_updates` с явным включением `edited_channel_post`, `edited_message`, `channel_post`.
-5. Удаляет вебхук и запускает polling.
+3. Подключает роутеры в порядке: `start` → `onboarding` → `marketplace` → `deals`.
+4. Удаляет вебхук и запускает polling.
+
+> Tamper detection (отслеживание правок постов) выполняется отдельным watcher-ботом — см. `docs/watcher.md`.
 
 ---
 
@@ -63,12 +63,6 @@ bot/
 2. Проверяет, что пользователь — администратор канала.
 3. Проверяет статус бота в канале (`bot_admin`).
 4. Отправляет данные в backend через `api_client.create_channel`.
-
-### `channel_posts.py` — Мониторинг правок
-
-Обрабатывает `edited_channel_post` и `edited_message`. Также использует `channel_post` с `edit_date` как fallback. При наличии `sender_chat` использует его `id` как идентификатор канала (сценарий связанной дискуссионной группы). При редактировании поста в канале вызывает `api_client.mark_tamper` для фиксации факта изменения.
-
----
 
 ### `marketplace.py` — Маркетплейс
 

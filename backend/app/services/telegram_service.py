@@ -100,65 +100,6 @@ def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[st
     return first.get("message_id")
 
 
-def check_message_tampered(
-    chat_id: int, message_id: int, original_text: str | None, has_media: bool
-) -> bool | None:
-    if not settings.bot_token:
-        return None
-    url_base = f"https://api.telegram.org/bot{settings.bot_token}"
-    if has_media:
-        method = "editMessageCaption"
-        payload: dict = {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "caption": original_text or "",
-        }
-    else:
-        if not original_text:
-            return None
-        method = "editMessageText"
-        payload = {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "text": original_text,
-        }
-    try:
-        resp = requests.post(f"{url_base}/{method}", json=payload)
-        data = resp.json()
-        if data.get("ok"):
-            logger.info(
-                "check_message_tampered: TAMPERED chat_id=%s message_id=%s",
-                chat_id,
-                message_id,
-            )
-            return True
-        description = (data.get("description") or "").lower()
-        if "not modified" in description:
-            return False
-        if "message to edit not found" in description or "message can't be edited" in description:
-            logger.warning(
-                "check_message_tampered: message gone chat_id=%s message_id=%s desc=%s",
-                chat_id,
-                message_id,
-                description,
-            )
-            return None
-        logger.warning(
-            "check_message_tampered: unexpected response chat_id=%s message_id=%s resp=%s",
-            chat_id,
-            message_id,
-            data,
-        )
-        return None
-    except Exception:
-        logger.exception(
-            "check_message_tampered: error chat_id=%s message_id=%s",
-            chat_id,
-            message_id,
-        )
-        return None
-
-
 def copy_message(from_chat_id: int, message_id: int, to_chat_id: int) -> bool:
     if not settings.bot_token:
         logger.warning("copy_message: bot_token not configured")
