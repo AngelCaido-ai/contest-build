@@ -21,7 +21,7 @@ def main() -> None:
         queue.enqueue(process_scheduled_posts)
         queue.enqueue(check_deleted_posts)
         queue.enqueue(check_verification_windows)
-        time.sleep(60)
+        time.sleep(20)
 
 
 if __name__ == "__main__":
