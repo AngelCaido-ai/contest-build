@@ -1,5 +1,9 @@
 # Дневник изменений
 
+## docs
+- 2026-02-08: Обновлён `docs/next-steps.md` — добавлен этап Bot UX: переписка по сделке (deal messages), удобный ввод даты/времени, индикация прогресса в формах. Детальная спецификация backend-эндпоинтов и bot-хендлеров для deal messages.
+- 2026-02-08: Обновлён `docs/next-steps.md` — полная ревизия плана относительно требований конкурса. Отмечены все закрытые этапы (backend, bot workflow, escrow, автопостинг, статистика). Сформулированы оставшиеся задачи: Mini App UI + TonConnect, README для судей, деплой, стабилизация.
+
 ## backend
 - 2026-02-06: Удалён костыль check_tampered_posts (editMessageText/editMessageCaption) — заменён watcher ботом.
 - 2026-02-06: Удалена функция check_message_tampered из telegram_service.
