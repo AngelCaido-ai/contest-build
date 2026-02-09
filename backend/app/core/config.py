@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ton_reserve_ton: float = 0.02
     ton_deposit_comment_prefix: str = "deal"
     escrow_secret_key: str | None = None
+    cors_origins: str = ""
     bot_log_chat_id: int | None = None
     payment_timeout_minutes: int = 1440
     verification_window_minutes: int = 60

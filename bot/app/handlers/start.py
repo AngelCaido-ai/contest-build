@@ -27,6 +27,7 @@ async def start_handler(message: Message) -> None:
 @router.message(Command("test_deal"))
 async def test_deal_handler(message: Message) -> None:
     try:
+        api_client.upsert_user(message.from_user.id, message.from_user.username)
         result = api_client.create_test_deal(message.from_user.id)
         deal_id = result.get("deal_id")
         publish_at = result.get("publish_at")

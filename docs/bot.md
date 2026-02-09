@@ -56,6 +56,10 @@ bot/
 
 Регистрирует/обновляет пользователя через `api_client.upsert_user` и выводит список доступных команд.
 
+### `start.py` — Команда `/test_deal`
+
+Создаёт тестовую сделку: сначала апсерт пользователя через `api_client.upsert_user`, затем вызывает `api_client.create_test_deal`.
+
 ### `onboarding.py` — Команда `/add_channel`
 
 Привязка Telegram-канала к платформе:

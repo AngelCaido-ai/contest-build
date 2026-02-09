@@ -754,10 +754,19 @@ def bot_create_test_deal(
     user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    channel_ids = [c.id for c in db.query(Channel).filter(Channel.owner_user_id == user.id).all()]
-    if not channel_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No channels found")
-    channel_id = channel_ids[0]
+    channel = db.query(Channel).filter(Channel.owner_user_id == user.id).first()
+    if not channel:
+        channel = Channel(
+            tg_chat_id=tg_user_id,
+            username=None,
+            title="Test Channel",
+            owner_user_id=user.id,
+            bot_admin_status=False,
+        )
+        db.add(channel)
+        db.flush()
+        logger.info("bot_create_test_deal: created test channel_id=%s for user_id=%s", channel.id, user.id)
+    channel_id = channel.id
     listing = Listing(
         channel_id=channel_id,
         price_ton=0.01,
