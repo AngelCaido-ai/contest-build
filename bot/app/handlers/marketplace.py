@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -56,6 +57,8 @@ class ListingRespondState(StatesGroup):
     price_usd = State()
     format = State()
     brief = State()
+    publish_at = State()
+    creative = State()
 
 
 class RequestCreateState(StatesGroup):
@@ -572,7 +575,26 @@ async def _prompt_listing_respond_format(message: Message) -> None:
 
 async def _prompt_listing_respond_brief(message: Message) -> None:
     await message.answer(
-        "Enter brief or 'skip'.",
+        "Enter brief or 'skip'.\n"
+        "Example:\n"
+        "Product: ...\n"
+        "Goal/CTA: ...\n"
+        "Links: ...\n"
+        "Restrictions: ...",
+        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
+    )
+
+
+async def _prompt_listing_respond_publish_at(message: Message) -> None:
+    await message.answer(
+        "Enter desired publish_at in ISO format or 'skip'.",
+        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
+    )
+
+
+async def _prompt_listing_respond_creative(message: Message) -> None:
+    await message.answer(
+        "Send example creative text or attach media, or 'skip'.",
         reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
     )
 
@@ -1527,6 +1549,52 @@ async def listing_respond_format(message: Message, state: FSMContext) -> None:
 async def listing_respond_brief(message: Message, state: FSMContext) -> None:
     value = (message.text or "").strip()
     brief_value = None if _is_skip(value) else value
+    await state.update_data(brief=brief_value)
+    await state.set_state(ListingRespondState.publish_at)
+    await _prompt_listing_respond_publish_at(message)
+
+
+@router.message(ListingRespondState.publish_at)
+async def listing_respond_publish_at(message: Message, state: FSMContext) -> None:
+    value = (message.text or "").strip()
+    if _is_skip(value):
+        await state.update_data(publish_at=None)
+    else:
+        normalized = value.replace("Z", "+00:00")
+        try:
+            datetime.fromisoformat(normalized)
+        except ValueError:
+            await message.answer("publish_at must be ISO format or 'skip'.")
+            return
+        await state.update_data(publish_at=normalized)
+    await state.set_state(ListingRespondState.creative)
+    await _prompt_listing_respond_creative(message)
+
+
+@router.message(ListingRespondState.creative)
+async def listing_respond_creative(message: Message, state: FSMContext) -> None:
+    text = None
+    skip_requested = False
+    if message.text:
+        text = message.text
+    if message.caption:
+        text = message.caption
+    media_file_ids = None
+    if message.photo:
+        media_file_ids = [{"type": "photo", "file_id": message.photo[-1].file_id}]
+    if message.video:
+        media_file_ids = [{"type": "video", "file_id": message.video.file_id}]
+    if message.animation:
+        media_file_ids = [{"type": "animation", "file_id": message.animation.file_id}]
+    if message.document:
+        media_file_ids = [{"type": "document", "file_id": message.document.file_id}]
+    if text and _is_skip(text):
+        if not media_file_ids:
+            skip_requested = True
+        text = None
+    if not text and not media_file_ids and not skip_requested:
+        await message.answer("Send text/media or 'skip'.")
+        return
     data = await state.get_data()
     listing_id = data.get("listing_id")
     if listing_id is None:
@@ -1548,10 +1616,31 @@ async def listing_respond_brief(message: Message, state: FSMContext) -> None:
         "listing_id": int(listing_id),
         "price": price,
         "format": format_value,
-        "brief": brief_value,
+        "brief": data.get("brief"),
+        "publish_at": data.get("publish_at"),
     }
     try:
         deal = api_client.create_deal(payload)
+        deal_id = int(deal.get("id"))
+        brief_lines = []
+        if data.get("brief"):
+            brief_lines.append(f"brief: {data.get('brief')}")
+        if text:
+            brief_lines.append(f"creative_example: {text}")
+        brief_text = "\n".join(brief_lines) if brief_lines else None
+        if brief_text or data.get("publish_at") or media_file_ids:
+            try:
+                api_client.create_advertiser_brief(
+                    deal_id,
+                    {
+                        "actor_tg_user_id": message.from_user.id,
+                        "text": brief_text,
+                        "publish_at": data.get("publish_at"),
+                        "media_file_ids": media_file_ids,
+                    },
+                )
+            except Exception:
+                pass
         await message.answer(f"Deal created: #{deal.get('id')}")
         try:
             from bot.app.handlers.deals import _send_deal_details
@@ -1559,7 +1648,7 @@ async def listing_respond_brief(message: Message, state: FSMContext) -> None:
             await message.answer("Use /deal to open the deal.", reply_markup=_main_menu_keyboard())
             await _clear_state_keep(state)
             return
-        await _send_deal_details(message, int(deal.get("id")), state=state, set_active=True)
+        await _send_deal_details(message, deal_id, state=state, set_active=True)
     except Exception as exc:
         await message.answer(f"Failed to create deal: {exc}")
     await _clear_state_keep(state)

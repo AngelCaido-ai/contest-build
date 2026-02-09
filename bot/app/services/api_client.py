@@ -180,6 +180,22 @@ def add_event(deal_id: int, event_type: str, payload: dict | None = None) -> dic
         raise
 
 
+def create_advertiser_brief(deal_id: int, payload: dict) -> dict:
+    logger.info("create_advertiser_brief: deal_id=%s", deal_id)
+    try:
+        resp = requests.post(
+            _url(f"/bot/deals/{deal_id}/advertiser_brief"),
+            json=payload,
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        logger.info("create_advertiser_brief: success deal_id=%s", deal_id)
+        return resp.json()
+    except Exception:
+        logger.exception("create_advertiser_brief: error deal_id=%s", deal_id)
+        raise
+
+
 def mark_tamper(channel_tg_chat_id: int, message_id: int) -> None:
     logger.info("mark_tamper: channel=%s message=%s", channel_tg_chat_id, message_id)
     try:

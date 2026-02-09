@@ -21,6 +21,7 @@ from app.models.user import User
 from app.schemas.bot import (
     BotChannelCreate,
     BotDealCreate,
+    BotAdvertiserBrief,
     BotEscrowDepositRequest,
     BotListingCreate,
     BotRequestCreate,
@@ -196,6 +197,23 @@ def _next_step_for_role(status: DealStatus, role: str) -> str | None:
     if status == DealStatus.VERIFYING:
         return "Release or refund after verification window." if role == ROLE_OWNER else "Waiting for release/refund."
     return None
+
+
+def _format_deal_terms(deal: Deal) -> str:
+    lines = []
+    if deal.price is not None:
+        lines.append(f"price: {deal.price}")
+    if deal.format:
+        lines.append(f"format: {deal.format}")
+    if deal.publish_at:
+        lines.append(f"publish_at: {deal.publish_at.isoformat()}")
+    if deal.verification_window:
+        lines.append(f"verification_window: {deal.verification_window}")
+    if deal.brief:
+        lines.append(f"brief: {deal.brief}")
+    if not lines:
+        return "terms: -"
+    return "terms:\n" + "\n".join(lines)
 
 
 def _deal_action_keyboard(deal: Deal, role: str) -> dict | None:
@@ -463,7 +481,20 @@ def bot_update_terms(
         log_event(db, deal.id, "TERMS_LOCKED", log_payload)
         db.commit()
         db.refresh(deal)
-        _notify_deal_parties(db, deal, f"Deal #{deal.id}: terms locked.")
+        advertiser = db.get(User, deal.advertiser_id)
+        channel = db.get(Channel, deal.channel_id)
+        owner = db.get(User, channel.owner_user_id) if channel else None
+        if owner:
+            _send_deal_notification(db, deal, owner, ROLE_OWNER, f"Deal #{deal.id}: terms locked.")
+        if advertiser:
+            terms_text = _format_deal_terms(deal)
+            _send_deal_notification(
+                db,
+                deal,
+                advertiser,
+                ROLE_ADVERTISER,
+                f"Deal #{deal.id}: terms locked.\n\n{terms_text}",
+            )
         logger.info("bot_update_terms: success deal_id=%s", deal_id)
         return DealOut.model_validate(deal)
     except HTTPException:
@@ -663,6 +694,60 @@ def bot_update_creative_status(
                 f"Deal #{deal.id}: edits requested. Comment: {comment}",
             )
     return CreativeOut.model_validate(creative)
+
+
+@router.post(
+    "/deals/{deal_id}/advertiser_brief",
+    response_model=DealEventOut,
+    dependencies=[Depends(get_bot_secret)],
+)
+def bot_add_advertiser_brief(
+    deal_id: int,
+    payload: BotAdvertiserBrief,
+    db: Session = Depends(get_db),
+) -> DealEventOut:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if not payload.actor_tg_user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    _, is_advertiser = _get_deal_role_flags(db, deal, payload.actor_tg_user_id)
+    if not is_advertiser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if not payload.text and not payload.media_file_ids and payload.publish_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    if payload.publish_at is not None:
+        if deal.status in {
+            DealStatus.POSTED,
+            DealStatus.VERIFYING,
+            DealStatus.RELEASED,
+            DealStatus.REFUNDED,
+            DealStatus.CANCELED,
+        }:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+        deal.publish_at = payload.publish_at
+        log_event(db, deal.id, "PUBLISH_AT_REQUESTED", {"publish_at": payload.publish_at.isoformat()})
+    event_payload: dict = {
+        "text": payload.text,
+        "media_file_ids": payload.media_file_ids,
+    }
+    if payload.publish_at is not None:
+        event_payload["publish_at"] = payload.publish_at.isoformat()
+    event = DealEvent(deal_id=deal_id, type="ADVERTISER_BRIEF", payload=event_payload)
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    channel = db.get(Channel, deal.channel_id)
+    owner = db.get(User, channel.owner_user_id) if channel else None
+    if owner and owner.tg_user_id:
+        lines = [f"Deal #{deal.id}: advertiser brief received."]
+        if payload.text:
+            lines.append(f"brief: {payload.text}")
+        if payload.publish_at is not None:
+            lines.append(f"publish_at: {payload.publish_at.isoformat()}")
+        send_media(int(owner.tg_user_id), "\n".join(lines), payload.media_file_ids)
+        _send_deal_notification(db, deal, owner, ROLE_OWNER, f"Deal #{deal.id}: advertiser brief received.")
+    return DealEventOut.model_validate(event)
 
 
 @router.get(

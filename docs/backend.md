@@ -393,6 +393,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/bot/deals/{id}/creative` | Создать/отправить креатив |
 | `POST` | `/bot/deals/{id}/creative/status` | Обновить статус креатива (approve/reject) |
 | `GET` | `/bot/deals/{id}/creative` | Получить креатив (последний или по версии) |
+| `POST` | `/bot/deals/{id}/advertiser_brief` | Бриф рекламодателя с медиа и пожеланием publish_at |
 | `POST` | `/bot/deals/{id}/events` | Добавить событие сделки |
 | `POST` | `/bot/tamper` | Отметить пост как изменённый |
 | `POST` | `/bot/deleted` | Отметить пост как удалённый |

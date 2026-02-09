@@ -96,7 +96,7 @@ bot/
 | StatesGroup          | Состояния                          | Назначение                                 |
 |----------------------|------------------------------------|--------------------------------------------|
 | `ListingCreateState` | `channel_id`, `price_usd`, `format`| Пошаговое создание листинга                |
-| `ListingRespondState`| `listing_id`, `price_usd`, `format`, `brief` | Отклик на листинг (создание сделки) |
+| `ListingRespondState`| `listing_id`, `price_usd`, `format`, `brief`, `publish_at`, `creative` | Отклик на листинг (создание сделки) |
 | `RequestCreateState` | `budget`, `brief`                  | Пошаговое создание заявки                  |
 | `WalletState`        | `address`                          | Установка TON-кошелька                     |
 | `ManagerAddState`    | `channel_id`, `username`           | Добавление менеджера                       |
@@ -257,6 +257,7 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 | `list_deals`             | GET            | `/bot/deals`                          | Список сделок (с фильтрами)     |
 | `get_deal`               | GET            | `/bot/deals/{id}`                     | Детали сделки                    |
 | `create_deal`            | POST           | `/bot/deals`                          | Создать сделку                   |
+| `create_advertiser_brief`| POST           | `/bot/deals/{id}/advertiser_brief`    | Бриф рекламодателя с медиа       |
 | `update_terms`           | POST           | `/bot/deals/{id}/terms`               | Обновить условия сделки          |
 | `update_publish_at`      | POST           | `/bot/deals/{id}/publish_at`          | Обновить время публикации        |
 | `update_status`          | POST           | `/bot/deals/{id}/status`              | Сменить статус сделки            |

@@ -59,3 +59,10 @@ class BotDealCreate(BaseModel):
 class BotEscrowDepositRequest(BaseModel):
     actor_tg_user_id: int
     expected_amount: float | None = None
+
+
+class BotAdvertiserBrief(BaseModel):
+    actor_tg_user_id: int
+    text: str | None = None
+    publish_at: datetime | None = None
+    media_file_ids: list[dict] | None = None
