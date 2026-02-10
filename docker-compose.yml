@@ -1,24 +1,37 @@
-version: "3.9"
 services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CADDY_SITE_ADDRESS: "${CADDY_SITE_ADDRESS:-:80}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_started
   postgres:
     image: postgres:15
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: contest
-      POSTGRES_USER: contest
-      POSTGRES_PASSWORD: contest
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: "${POSTGRES_DB:-contest}"
+      POSTGRES_USER: "${POSTGRES_USER:-contest}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-contest}"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U contest -d contest"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contest} -d ${POSTGRES_DB:-contest}"]
       interval: 5s
       timeout: 5s
       retries: 5
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     volumes:
       - redisdata:/data
     healthcheck:
@@ -30,11 +43,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env
     environment:
       PYTHONPATH: /app/backend
-      DATABASE_URL: postgresql+psycopg2://contest:contest@postgres:5432/contest
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-contest}:${POSTGRES_PASSWORD:-contest}@postgres:5432/${POSTGRES_DB:-contest}"
       REDIS_URL: redis://redis:6379/0
       BOT_SECRET: "${BOT_SECRET}"
     depends_on:
@@ -42,18 +56,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "cd backend && alembic upgrade head && cd .. && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
-    ports:
-      - "8000:8000"
+    command: sh -c "cd backend && alembic upgrade head && cd .. && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
+    expose:
+      - "8000"
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env
     environment:
       PYTHONPATH: /app/backend
-      DATABASE_URL: postgresql+psycopg2://contest:contest@postgres:5432/contest
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-contest}:${POSTGRES_PASSWORD:-contest}@postgres:5432/${POSTGRES_DB:-contest}"
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
@@ -67,11 +82,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env
     environment:
       PYTHONPATH: /app/backend
-      DATABASE_URL: postgresql+psycopg2://contest:contest@postgres:5432/contest
+      DATABASE_URL: "postgresql+psycopg2://${POSTGRES_USER:-contest}:${POSTGRES_PASSWORD:-contest}@postgres:5432/${POSTGRES_DB:-contest}"
       REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
@@ -85,6 +101,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env
     environment:
@@ -111,6 +128,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env
     environment:
@@ -129,18 +147,8 @@ services:
         else
           python -m watcher.app.main
         fi
-  miniapp:
-    build:
-      context: ./miniapp
-      dockerfile: Dockerfile
-    environment:
-      VITE_API_BASE: http://localhost:8000
-      VITE_BOT_URL: https://t.me/
-    depends_on:
-      backend:
-        condition: service_started
-    ports:
-      - "5173:5173"
 volumes:
   pgdata:
   redisdata:
+  caddy_data:
+  caddy_config:

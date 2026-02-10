@@ -27,7 +27,7 @@ export function PaymentPage() {
 
   const fetcher = useCallback(
     () =>
-      apiFetch<EscrowPayment>(`/escrow/deals/${id}/deposit`, { method: "POST" }),
+      apiFetch<EscrowPayment>(`/escrow/deals/${id}/deposit`, { method: "POST", body: JSON.stringify({}) }),
     [id],
   );
   const { data: escrow, loading, error } = useApi(fetcher, [id]);
