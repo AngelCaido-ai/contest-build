@@ -352,7 +352,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
-| `POST` | `/deals/` | Создать сделку (из листинга или заявки) | JWT |
+| `POST` | `/deals/` | Создать сделку (из листинга или заявки); 409 если по листингу уже есть активная сделка | JWT |
 | `GET` | `/deals/` | Список сделок текущего пользователя | JWT |
 | `GET` | `/deals/{id}` | Получить сделку | JWT (участник) |
 
@@ -383,7 +383,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `GET` | `/bot/channels` | Список каналов пользователя (по `tg_user_id`) |
 | `POST` | `/bot/listings` | Создать листинг (требуется `linked_wallet`, иначе 400) |
 | `POST` | `/bot/requests` | Создать заявку |
-| `POST` | `/bot/deals` | Создать сделку |
+| `POST` | `/bot/deals` | Создать сделку; 409 если по листингу уже есть активная сделка |
 | `GET` | `/bot/deals` | Список сделок (фильтры: `tg_user_id`, `statuses`, `role`, `channel_id`, `limit`, `offset`, `order_by`) |
 | `GET` | `/bot/deals/{id}` | Получить сделку |
 | `POST` | `/bot/deals/{id}/terms` | Зафиксировать условия сделки |

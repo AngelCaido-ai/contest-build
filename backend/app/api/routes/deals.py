@@ -25,10 +25,21 @@ def create_deal(
 ) -> DealOut:
     if not payload.listing_id and not payload.request_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    FINAL_STATUSES = {DealStatus.CANCELED, DealStatus.RELEASED, DealStatus.REFUNDED}
     if payload.listing_id:
         listing = db.get(Listing, payload.listing_id)
         if not listing:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        active_deal = (
+            db.query(Deal)
+            .filter(Deal.listing_id == listing.id, ~Deal.status.in_(FINAL_STATUSES))
+            .first()
+        )
+        if active_deal:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Active deal already exists for this listing",
+            )
         channel = db.get(Channel, listing.channel_id)
         if not channel:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
