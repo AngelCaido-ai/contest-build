@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.models.enums import DealStatus
+from app.schemas.event import DealEventOut
 
 
 class DealCreate(BaseModel):
@@ -55,3 +56,26 @@ class DealOut(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DealChannelBrief(BaseModel):
+    id: int
+    username: str | None
+    title: str | None
+    subscribers: int | None = None
+    views_per_post: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DealAdvertiserBrief(BaseModel):
+    id: int
+    tg_username: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DealDetailOut(DealOut):
+    channel_info: DealChannelBrief | None = None
+    advertiser_info: DealAdvertiserBrief | None = None
+    events: list[DealEventOut] = []

@@ -15,7 +15,8 @@ backend/
 │       ├── 0002_escrow_fields.py
 │       ├── 0003_escrow_comment.py
 │       ├── 0004_deal_brief.py
-│       └── 0005_user_tg_username.py
+│       ├── 0005_user_tg_username.py
+│       └── 0006_sweep_fields.py
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                    # Точка входа FastAPI
@@ -114,6 +115,8 @@ backend/
 | `BOT_LOG_CHAT_ID` | `int?` | `None` | Chat ID для проверки удалённых постов |
 | `PAYMENT_TIMEOUT_MINUTES` | `int` | `1440` | Таймаут ожидания оплаты (24 часа) |
 | `VERIFICATION_WINDOW_MINUTES` | `int` | `60` | Окно верификации поста (60 мин) |
+| `SWEEP_DELAY_MINUTES` | `int` | `5` | Задержка перед sweep после release/refund |
+| `SWEEP_MIN_BALANCE_TON` | `float` | `0.005` | Минимальный баланс для sweep (если меньше — комиссия съест всё) |
 
 ---
 
@@ -247,10 +250,12 @@ backend/
 | `confirmed_at` | `datetime?` | Подтверждение оплаты |
 | `release_tx_hash` | `str?` | Хеш транзакции release |
 | `refund_tx_hash` | `str?` | Хеш транзакции refund |
+| `sweep_tx_hash` | `str?` | Хеш транзакции sweep (или маркер skip) |
 | `payout_address` | `str?` | Адрес выплаты (owner) |
 | `refund_address` | `str?` | Адрес возврата (advertiser) |
 | `released_at` | `datetime?` | Дата выплаты |
 | `refunded_at` | `datetime?` | Дата возврата |
+| `swept_at` | `datetime?` | Дата sweep остатка |
 | `created_at` | `datetime` | Дата создания |
 
 ### Creative
@@ -360,6 +365,14 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `GET` | `/deals/` | Список сделок текущего пользователя | JWT |
 | `GET` | `/deals/{id}` | Получить сделку | JWT (участник) |
 
+`GET /deals/{id}` возвращает расширенный объект (поверх базовой схемы сделки), чтобы Mini App мог показать больше контекста без дополнительных запросов.
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `channel_info` | `object \| null` | Краткая информация о канале + статистика (если сохранена в `channel_stats`) |
+| `advertiser_info` | `object \| null` | Краткая информация о рекламодателе |
+| `events` | `DealEventOut[]` | История событий сделки (отсортирована по `created_at`) |
+
 ### Escrow (`/escrow`)
 
 | Метод | Путь | Описание | Авторизация |
@@ -419,6 +432,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 - `scan_incoming_payments(db)` — сканирование всех ожидающих депозитов, автоподтверждение при обнаружении транзакции
 - `release_payment(db, deal, payout_address)` — отправка средств владельцу канала, переход в `RELEASED`
 - `refund_payment(db, deal, refund_address, reason)` — возврат средств рекламодателю, переход в `REFUNDED`
+- `sweep_deposit(db, deal, payment)` — возврат остатка (reserve) с deposit-кошелька рекламодателю (mode 128)
 
 ### ton_escrow.py
 
@@ -430,6 +444,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 - `find_incoming_tx(address, amount, comment)` — поиск входящей транзакции по адресу/сумме/комментарию
 - `send_payout(key, address, amount)` — отправка TON на адрес выплаты
 - `send_refund(key, address, amount)` — отправка TON на адрес возврата
+- `send_sweep(key, address)` — отправка всего остатка на адрес рекламодателя (mode 128)
 - Поддержка кошельков: v1r1–v4r2, v5r1 (автоопределение версии)
 - Fallback: v3 API → v2 API при ошибках
 - Retry: до 3 попыток при transient-ошибках
@@ -458,6 +473,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `process_scheduled_posts` | Публикация постов в каналы для сделок с `publish_at ≤ now` и статусом `APPROVED`/`SCHEDULED` |
 | `check_deleted_posts` | Проверка удалённых постов через `copyMessage` в лог-чат |
 | `check_verification_windows` | По истечении окна верификации: `release` если пост цел, `refund` если изменён/удалён |
+| `sweep_completed_deposits` | Sweep остатков с deposit-кошельков после `RELEASED/REFUNDED` с задержкой `SWEEP_DELAY_MINUTES` |
 
 ---
 
@@ -469,11 +485,11 @@ RQ worker (`SimpleWorker` с `TimerDeathPenalty` для Windows). Подключ
 
 ### `worker/scheduler.py`
 
-Бесконечный цикл, ставит 5 задач в очередь каждые 20 секунд:
+Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд:
 
 ```
 check_payment_timeouts → scan_escrow_deposits → process_scheduled_posts →
-check_deleted_posts → check_verification_windows → sleep(20) → повтор
+check_deleted_posts → check_verification_windows → sweep_completed_deposits → sleep(20) → повтор
 ```
 
 > Tamper detection выполняется отдельным watcher-ботом (см. `docs/watcher.md`).
@@ -505,6 +521,7 @@ check_deleted_posts → check_verification_windows → sleep(20) → повто�
 | `0003_escrow_comment` | Добавлено поле `deposit_comment` |
 | `0004_deal_brief` | Добавлено поле `brief` в deals |
 | `0005_user_tg_username` | Добавлено поле `tg_username` в users |
+| `0006_sweep_fields` | Добавлены поля `sweep_tx_hash`, `swept_at` для sweep остатков escrow |
 
 ---
 

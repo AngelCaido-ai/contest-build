@@ -179,3 +179,40 @@ def refund_payment(db: Session, deal: Deal, refund_address: str | None, reason: 
     except Exception:
         logger.exception("refund_payment: error deal_id=%s", deal.id)
         raise
+
+
+def sweep_deposit(db: Session, deal: Deal, payment: EscrowPayment) -> EscrowPayment:
+    logger.info("sweep_deposit: start deal_id=%s", deal.id)
+    if deal.status not in (DealStatus.RELEASED, DealStatus.REFUNDED):
+        logger.warning("sweep_deposit: invalid status deal_id=%s status=%s", deal.id, deal.status)
+        raise ValueError("deal_not_completed")
+    if payment.sweep_tx_hash:
+        logger.info("sweep_deposit: already swept deal_id=%s", deal.id)
+        return payment
+    advertiser = db.get(User, deal.advertiser_id)
+    destination = advertiser.linked_wallet if advertiser else None
+    if not destination:
+        logger.warning("sweep_deposit: destination_missing deal_id=%s", deal.id)
+        raise ValueError("advertiser_wallet_missing")
+    try:
+        if payment.deposit_key:
+            deposit_key = ton_escrow.decrypt_deposit_key(payment.deposit_key)
+        else:
+            deposit_key = ton_escrow.derive_deposit_key(deal.id)
+        tx_hash = ton_escrow.send_sweep(deposit_key, destination)
+        if tx_hash:
+            payment.sweep_tx_hash = tx_hash
+            log_event(db, deal.id, "ESCROW_SWEPT", {"tx_hash": tx_hash})
+        else:
+            payment.sweep_tx_hash = "SKIPPED_LOW_BALANCE"
+            log_event(db, deal.id, "ESCROW_SWEEP_SKIPPED", {"reason": "low_balance"})
+        payment.swept_at = datetime.utcnow()
+        db.commit()
+        db.refresh(payment)
+        logger.info("sweep_deposit: success deal_id=%s tx_hash=%s", deal.id, tx_hash)
+        return payment
+    except ValueError:
+        raise
+    except Exception:
+        logger.exception("sweep_deposit: error deal_id=%s", deal.id)
+        raise

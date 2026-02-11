@@ -24,7 +24,7 @@ export function ChannelsPage() {
   const [adminsLoading, setAdminsLoading] = useState(false);
 
   const fetchChannels = useCallback(() => apiFetch<Channel[]>("/channels"), []);
-  const { data: channels, loading } = useApi(fetchChannels, []);
+  const { data: channels, loading, refetch } = useApi(fetchChannels, []);
 
   const selectedChannel = useMemo(
     () => channels?.find((ch) => ch.id === selectedChannelId) ?? null,
@@ -82,6 +82,7 @@ export function ChannelsPage() {
     try {
       await apiFetch(`/stats/channels/${channelId}/refresh`, { method: "POST" });
       showToast("Статистика обновлена", { type: "success" });
+      refetch();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
     }

@@ -11,6 +11,7 @@ from app.tasks.deal_tasks import (
     check_verification_windows,
     process_scheduled_posts,
     scan_escrow_deposits,
+    sweep_completed_deposits,
 )
 
 
@@ -21,6 +22,7 @@ def main() -> None:
         queue.enqueue(process_scheduled_posts)
         queue.enqueue(check_deleted_posts)
         queue.enqueue(check_verification_windows)
+        queue.enqueue(sweep_completed_deposits)
         time.sleep(20)
 
 

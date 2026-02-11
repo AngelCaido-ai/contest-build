@@ -17,12 +17,14 @@ async def add_channel(message: Message, bot: Bot) -> None:
     if len(parts) < 2:
         await message.answer("Usage: /add_channel @channel or /add_channel -1001234567890")
         return
-    ref = parts[1]
+    ref = parts[1].strip()
+    if not ref.startswith("@") and not ref.startswith("-") and not ref.isdigit():
+        ref = f"@{ref}"
     try:
         chat = await bot.get_chat(ref)
     except Exception:
-        logger.warning("add_channel: channel not found ref=%s tg_user_id=%s", ref, message.from_user.id)
-        await message.answer("Channel not found")
+        logger.exception("add_channel: get_chat failed ref=%s tg_user_id=%s", ref, message.from_user.id)
+        await message.answer("Channel not found. Make sure the bot is added to the channel as admin.")
         return
     try:
         user_member = await bot.get_chat_member(chat.id, message.from_user.id)

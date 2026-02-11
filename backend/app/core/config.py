@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     bot_log_chat_id: int | None = None
     payment_timeout_minutes: int = 1440
     verification_window_minutes: int = 60
+    sweep_delay_minutes: int = 5
+    sweep_min_balance_ton: float = 0.005
 
     @field_validator("telethon_api_id", "bot_log_chat_id", "ton_wallet_id", "ton_wallet_subwallet", mode="before")
     @classmethod

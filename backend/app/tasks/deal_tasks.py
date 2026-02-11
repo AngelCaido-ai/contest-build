@@ -8,9 +8,10 @@ from app.db.session import SessionLocal
 from app.models.channel import Channel
 from app.models.creative import Creative
 from app.models.deal import Deal
+from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
 from app.services.deal_service import log_event, set_status
-from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments
+from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments, sweep_deposit
 from app.services.telegram_service import copy_message, send_media, send_message
 
 logger = logging.getLogger(__name__)
@@ -159,5 +160,41 @@ def check_verification_windows() -> None:
         logger.info("check_verification_windows: done")
     except Exception:
         logger.exception("check_verification_windows: error")
+    finally:
+        db.close()
+
+
+def sweep_completed_deposits() -> None:
+    logger.info("sweep_completed_deposits: start")
+    db: Session = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        cutoff = now - timedelta(minutes=settings.sweep_delay_minutes)
+        rows = (
+            db.query(EscrowPayment, Deal)
+            .join(Deal, Deal.id == EscrowPayment.deal_id)
+            .filter(
+                Deal.status.in_([DealStatus.RELEASED, DealStatus.REFUNDED]),
+                EscrowPayment.sweep_tx_hash.is_(None),
+                (
+                    (EscrowPayment.released_at.isnot(None) & (EscrowPayment.released_at < cutoff))
+                    | (EscrowPayment.refunded_at.isnot(None) & (EscrowPayment.refunded_at < cutoff))
+                ),
+            )
+            .all()
+        )
+        logger.info("sweep_completed_deposits: found %d payments", len(rows))
+        for payment, deal in rows:
+            try:
+                sweep_deposit(db, deal, payment)
+                logger.info("sweep_completed_deposits: swept deal_id=%s", deal.id)
+            except ValueError as exc:
+                log_event(db, deal.id, "ESCROW_SWEEP_FAILED", {"error": str(exc)})
+                logger.warning("sweep_completed_deposits: sweep failed deal_id=%s error=%s", deal.id, exc)
+            except Exception:
+                logger.exception("sweep_completed_deposits: sweep error deal_id=%s", deal.id)
+        logger.info("sweep_completed_deposits: done")
+    except Exception:
+        logger.exception("sweep_completed_deposits: error")
     finally:
         db.close()

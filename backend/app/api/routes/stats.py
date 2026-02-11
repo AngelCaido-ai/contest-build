@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,7 @@ from app.models.channel_stats import ChannelStats
 from app.schemas.channel_stats import ChannelStatsOut
 from app.services.stats_service import fetch_bot_api_subscribers, fetch_stats
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -32,7 +34,7 @@ def refresh_stats(
     channel = db.get(Channel, channel_id)
     if not channel or not _can_access_channel(db, channel, user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    stats = fetch_stats(channel.tg_chat_id)
+    stats = fetch_stats(channel.tg_chat_id, channel.username)
     subscribers = None
     views_per_post = None
     languages_json = None
@@ -41,20 +43,26 @@ def refresh_stats(
     if stats:
         subscribers = stats.get("followers", {}).get("current")
         views_per_post = stats.get("views_per_post", {}).get("current")
+        if not views_per_post and stats.get("_views_from_posts"):
+            views_per_post = stats["_views_from_posts"]
         languages_json = stats.get("languages_graph")
         premium_json = stats.get("premium_graph")
         source = "mtproto"
     else:
         subscribers = fetch_bot_api_subscribers(channel.tg_chat_id)
         source = "bot_api"
+    logger.info(
+        "refresh_stats: channel_id=%s source=%s subscribers=%s views_per_post=%s",
+        channel_id, source, subscribers, views_per_post,
+    )
     if subscribers is None and views_per_post is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
     existing = db.query(ChannelStats).filter(ChannelStats.channel_id == channel_id).first()
     if not existing:
         existing = ChannelStats(channel_id=channel_id)
         db.add(existing)
-    existing.subscribers = subscribers
-    existing.views_per_post = views_per_post
+    existing.subscribers = int(subscribers) if subscribers is not None else None
+    existing.views_per_post = int(views_per_post) if views_per_post is not None else None
     existing.languages_json = languages_json
     existing.premium_json = premium_json
     existing.updated_at = datetime.utcnow()

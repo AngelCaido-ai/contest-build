@@ -72,6 +72,25 @@ export type Deal = {
   channel?: Channel;
 };
 
+export type DealChannelBrief = {
+  id: number;
+  username: string | null;
+  title: string | null;
+  subscribers: number | null;
+  views_per_post: number | null;
+};
+
+export type DealAdvertiserBrief = {
+  id: number;
+  tg_username: string | null;
+};
+
+export type DealDetail = Deal & {
+  channel_info?: DealChannelBrief | null;
+  advertiser_info?: DealAdvertiserBrief | null;
+  events?: DealEvent[];
+};
+
 export type Channel = {
   id: number;
   tg_chat_id: number;

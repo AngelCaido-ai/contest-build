@@ -6,11 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
+from app.models.channel_stats import ChannelStats
 from app.models.deal import Deal
+from app.models.deal_event import DealEvent
 from app.models.listing import Listing
 from app.models.request import Request
+from app.models.user import User
 from app.models.enums import DealStatus
-from app.schemas.deal import DealCreate, DealOut
+from app.schemas.deal import DealAdvertiserBrief, DealChannelBrief, DealCreate, DealDetailOut, DealOut
+from app.schemas.event import DealEventOut
 from app.services.deal_service import log_event
 
 logger = logging.getLogger(__name__)
@@ -97,16 +101,46 @@ def list_deals(
     return [DealOut.model_validate(item) for item in items]
 
 
-@router.get("/{deal_id}", response_model=DealOut)
+@router.get("/{deal_id}", response_model=DealDetailOut)
 def get_deal(
     deal_id: int,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
-) -> DealOut:
+) -> DealDetailOut:
     deal = db.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     channel = db.get(Channel, deal.channel_id)
     if deal.advertiser_id != user.id and (not channel or channel.owner_user_id != user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return DealOut.model_validate(deal)
+
+    stats = db.query(ChannelStats).filter(ChannelStats.channel_id == deal.channel_id).first()
+    advertiser = db.get(User, deal.advertiser_id)
+    events = (
+        db.query(DealEvent)
+        .filter(DealEvent.deal_id == deal.id)
+        .order_by(DealEvent.created_at.asc())
+        .all()
+    )
+
+    channel_info = None
+    if channel:
+        channel_info = DealChannelBrief(
+            id=channel.id,
+            username=channel.username,
+            title=channel.title,
+            subscribers=stats.subscribers if stats else None,
+            views_per_post=stats.views_per_post if stats else None,
+        )
+
+    advertiser_info = None
+    if advertiser:
+        advertiser_info = DealAdvertiserBrief(id=advertiser.id, tg_username=advertiser.tg_username)
+
+    base = DealOut.model_validate(deal)
+    return DealDetailOut(
+        **base.model_dump(),
+        channel_info=channel_info,
+        advertiser_info=advertiser_info,
+        events=[DealEventOut.model_validate(e) for e in events],
+    )

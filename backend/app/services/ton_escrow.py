@@ -608,9 +608,35 @@ def send_refund(deposit_key: str, refund_address: str, amount: float | None) -> 
     return _send_boc(boc)
 
 
-def _create_transfer_boc_v5(wallet: _WalletV5, destination: str, amount_nano: int, seqno: int) -> str:
+def send_sweep(deposit_key: str, destination: str) -> str | None:
+    logger.info("send_sweep: to=%s", destination)
+    min_balance_ton = settings.sweep_min_balance_ton or 0
+    min_balance_nano = int(to_nano(str(min_balance_ton), "ton"))
+    if _is_wallet_v5_version():
+        wallet = _wallet_from_key(deposit_key)
+        wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        balance_nano = _wallet_balance_nano(wallet_address)
+        if balance_nano <= min_balance_nano:
+            logger.info("send_sweep: skip low balance address=%s balance=%s", wallet_address, balance_nano)
+            return None
+        seqno = _wallet_seqno(wallet_address)
+        boc = _create_transfer_boc_v5(wallet, destination, 0, seqno, send_mode=128)
+        return _send_boc(boc)
+    wallet = _wallet_from_key(deposit_key)
+    wallet_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+    balance_nano = _wallet_balance_nano(wallet_address)
+    if balance_nano <= min_balance_nano:
+        logger.info("send_sweep: skip low balance address=%s balance=%s", wallet_address, balance_nano)
+        return None
+    seqno = _wallet_seqno(wallet_address)
+    query = wallet.create_transfer_message(destination, 0, seqno, send_mode=128)
+    boc = bytes_to_b64str(query["message"].to_boc(False))
+    return _send_boc(boc)
+
+
+def _create_transfer_boc_v5(wallet: _WalletV5, destination: str, amount_nano: int, seqno: int, send_mode: int = 3) -> str:
     dest = PytoniqAddress(destination)
-    msg = WalletV5R1.create_wallet_internal_message(destination=dest, value=amount_nano)
+    msg = WalletV5R1.create_wallet_internal_message(destination=dest, value=amount_nano, send_mode=send_mode)
     op_code = 0x7369676e
     signing_message = begin_cell().store_uint(op_code, 32)
     signing_message.store_uint(wallet.wallet_id, 32)
