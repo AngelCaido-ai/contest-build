@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.channel_stats import ChannelStatsOut
+
 
 class ListingCreate(BaseModel):
     channel_id: int
@@ -34,3 +36,16 @@ class ListingOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChannelBriefOut(BaseModel):
+    id: int
+    username: str | None
+    title: str | None
+    stats: ChannelStatsOut | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListingDetailOut(ListingOut):
+    channel: ChannelBriefOut | None = None

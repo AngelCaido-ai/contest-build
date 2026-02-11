@@ -11,6 +11,17 @@ export type Listing = {
   channel?: Channel;
 };
 
+export type ChannelBrief = {
+  id: number;
+  username: string | null;
+  title: string | null;
+  stats: ChannelStats | null;
+};
+
+export type ListingDetail = Omit<Listing, "channel"> & {
+  channel?: ChannelBrief | null;
+};
+
 export type RequestItem = {
   id: number;
   advertiser_id: number;

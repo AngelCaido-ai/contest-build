@@ -7,7 +7,6 @@ import {
   Group,
   GroupItem,
   SkeletonElement,
-  useToast,
 } from "@telegram-tools/ui-kit";
 import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
@@ -15,7 +14,6 @@ import { EmptyState } from "../components/EmptyState";
 import type { Listing } from "../types";
 
 export function ListingsPage() {
-  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const [priceMin, setPriceMin] = useState("");
@@ -32,19 +30,6 @@ export function ListingsPage() {
   }, [priceMin, priceMax]);
 
   const { data: listings, loading, refetch } = useApi(fetcher, [priceMin, priceMax]);
-
-  const createDeal = async (listingId: number, channelId: number) => {
-    try {
-      const deal = await apiFetch<{ id: number }>("/deals", {
-        method: "POST",
-        body: JSON.stringify({ listing_id: listingId, channel_id: channelId }),
-      });
-      showToast("Сделка создана", { type: "success" });
-      navigate(`/deals/${deal.id}`);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -105,13 +90,7 @@ export function ListingsPage() {
               key={item.id}
               text={`Канал #${item.channel_id}`}
               description={`${item.price_usd != null ? `$${item.price_usd}` : "Цена не указана"} · ${item.format}`}
-              after={
-                <Button
-                  text="Сделка"
-                  type="primary"
-                  onClick={() => createDeal(item.id, item.channel_id)}
-                />
-              }
+              onClick={() => navigate(`/listings/${item.id}`)}
               chevron
             />
           ))}

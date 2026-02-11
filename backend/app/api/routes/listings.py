@@ -5,8 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_optional_current_user
 from app.models.channel import Channel
+from app.models.channel_stats import ChannelStats
 from app.models.listing import Listing
-from app.schemas.listing import ListingCreate, ListingOut, ListingUpdate
+from app.schemas.channel_stats import ChannelStatsOut
+from app.schemas.listing import (
+    ChannelBriefOut,
+    ListingCreate,
+    ListingDetailOut,
+    ListingOut,
+    ListingUpdate,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -71,12 +79,23 @@ def list_listings(
     return [ListingOut.model_validate(item) for item in items]
 
 
-@router.get("/{listing_id}", response_model=ListingOut)
-def get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingOut:
+@router.get("/{listing_id}", response_model=ListingDetailOut)
+def get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingDetailOut:
     listing = db.get(Listing, listing_id)
     if not listing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return ListingOut.model_validate(listing)
+    channel = db.get(Channel, listing.channel_id)
+    channel_brief = None
+    if channel:
+        stats = db.query(ChannelStats).filter(ChannelStats.channel_id == channel.id).first()
+        channel_brief = ChannelBriefOut(
+            id=channel.id,
+            username=channel.username,
+            title=channel.title,
+            stats=ChannelStatsOut.model_validate(stats) if stats else None,
+        )
+    result = ListingDetailOut.model_validate(listing)
+    return result.model_copy(update={"channel": channel_brief})
 
 
 @router.patch("/{listing_id}", response_model=ListingOut)

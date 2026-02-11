@@ -336,8 +336,10 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 |---|---|---|---|
 | `POST` | `/listings/` | Создать листинг | JWT (owner) |
 | `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT при `exclude_own=true` |
-| `GET` | `/listings/{id}` | Получить листинг | — |
+| `GET` | `/listings/{id}` | Получить листинг (включает preview канала и статистику, если есть) | — |
 | `PATCH` | `/listings/{id}` | Обновить листинг | JWT (owner) |
+
+`GET /listings/{id}` дополнительно возвращает объект `channel` (id, username, title, stats) для предпросмотра в Mini App.
 
 ### Requests (`/requests`)
 
