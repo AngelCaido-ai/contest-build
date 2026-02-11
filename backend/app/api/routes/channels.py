@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -19,6 +20,16 @@ from app.services import telegram_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _can_access_channel(db: Session, channel: Channel, user: User) -> bool:
+    if channel.owner_user_id == user.id:
+        return True
+    return (
+        db.query(ChannelManager)
+        .filter(ChannelManager.channel_id == channel.id, ChannelManager.user_id == user.id)
+        .first()
+    ) is not None
 
 
 def _normalize_tg_username(value: str | None) -> str | None:
@@ -69,7 +80,17 @@ def list_channels(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[ChannelOut]:
-    items = db.query(Channel).filter(Channel.owner_user_id == user.id).all()
+    managed_ids = db.query(ChannelManager.channel_id).filter(ChannelManager.user_id == user.id)
+    items = (
+        db.query(Channel)
+        .filter(
+            or_(
+                Channel.owner_user_id == user.id,
+                Channel.id.in_(managed_ids),
+            )
+        )
+        .all()
+    )
     return [ChannelOut.model_validate(item) for item in items]
 
 
@@ -80,7 +101,7 @@ def get_channel(
     user=Depends(get_current_user),
 ) -> ChannelOut:
     channel = db.get(Channel, channel_id)
-    if not channel or channel.owner_user_id != user.id:
+    if not channel or not _can_access_channel(db, channel, user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return ChannelOut.model_validate(channel)
 

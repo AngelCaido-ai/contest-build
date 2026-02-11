@@ -5,11 +5,22 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
+from app.models.channel_manager import ChannelManager
 from app.models.channel_stats import ChannelStats
 from app.schemas.channel_stats import ChannelStatsOut
 from app.services.stats_service import fetch_bot_api_subscribers, fetch_stats
 
 router = APIRouter()
+
+
+def _can_access_channel(db: Session, channel: Channel, user) -> bool:
+    if channel.owner_user_id == user.id:
+        return True
+    return (
+        db.query(ChannelManager)
+        .filter(ChannelManager.channel_id == channel.id, ChannelManager.user_id == user.id)
+        .first()
+    ) is not None
 
 
 @router.post("/channels/{channel_id}/refresh", response_model=ChannelStatsOut)
@@ -19,7 +30,7 @@ def refresh_stats(
     user=Depends(get_current_user),
 ) -> ChannelStatsOut:
     channel = db.get(Channel, channel_id)
-    if not channel or channel.owner_user_id != user.id:
+    if not channel or not _can_access_channel(db, channel, user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     stats = fetch_stats(channel.tg_chat_id)
     subscribers = None

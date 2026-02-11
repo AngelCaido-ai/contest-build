@@ -9,11 +9,13 @@ import {
 } from "@telegram-tools/ui-kit";
 import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
+import { useAuth } from "../contexts/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import type { Channel, Manager, TgAdmin } from "../types";
 
 export function ChannelsPage() {
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [managers, setManagers] = useState<Manager[]>([]);
@@ -23,6 +25,12 @@ export function ChannelsPage() {
 
   const fetchChannels = useCallback(() => apiFetch<Channel[]>("/channels"), []);
   const { data: channels, loading } = useApi(fetchChannels, []);
+
+  const selectedChannel = useMemo(
+    () => channels?.find((ch) => ch.id === selectedChannelId) ?? null,
+    [channels, selectedChannelId],
+  );
+  const isOwner = selectedChannel !== null && selectedChannel.owner_user_id === user?.id;
 
   const managerTgIds = useMemo(
     () => new Set(managers.map((m) => m.tg_user_id)),
@@ -60,8 +68,14 @@ export function ChannelsPage() {
 
   const selectChannel = (id: number) => {
     setSelectedChannelId(id);
-    loadManagers(id);
-    loadTgAdmins(id);
+    const ch = channels?.find((c) => c.id === id);
+    if (ch && ch.owner_user_id === user?.id) {
+      loadManagers(id);
+      loadTgAdmins(id);
+    } else {
+      setManagers([]);
+      setTgAdmins([]);
+    }
   };
 
   const refreshStats = async (channelId: number) => {
@@ -151,7 +165,7 @@ export function ChannelsPage() {
         </Group>
       )}
 
-      {selectedChannelId && (
+      {selectedChannelId && isOwner && (
         <>
           {managersLoading ? (
             <Group header="Менеджеры">

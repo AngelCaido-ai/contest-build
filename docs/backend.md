@@ -323,8 +323,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/channels/` | Создать канал | JWT |
-| `GET` | `/channels/` | Список каналов текущего пользователя | JWT |
-| `GET` | `/channels/{id}` | Получить канал | JWT (owner) |
+| `GET` | `/channels/` | Список каналов текущего пользователя (owner + manager) | JWT |
+| `GET` | `/channels/{id}` | Получить канал | JWT (owner/manager) |
 | `PATCH` | `/channels/{id}` | Обновить канал | JWT (owner) |
 | `POST` | `/channels/{id}/managers` | Добавить менеджера | JWT (owner) |
 | `GET` | `/channels/{id}/managers` | Список менеджеров | JWT (owner) |
@@ -369,7 +369,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
-| `POST` | `/stats/channels/{id}/refresh` | Обновить статистику канала | JWT (owner) |
+| `POST` | `/stats/channels/{id}/refresh` | Обновить статистику канала | JWT (owner/manager) |
 
 ### Bot Actions (`/bot`)
 
