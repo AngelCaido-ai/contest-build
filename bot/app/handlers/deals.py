@@ -692,15 +692,16 @@ async def _send_deal_details(
     draft_available = False
     if state:
         draft_available = await _get_deal_draft(state, deal_id) is not None
-    await message.answer(
-        _deal_text(deal, role),
-        reply_markup=_deal_actions_keyboard(
-            deal,
-            role,
-            creative_version=creative_version,
-            draft_available=draft_available,
-        ),
-    )
+    if not (state and set_active):
+        await message.answer(
+            _deal_text(deal, role),
+            reply_markup=_deal_actions_keyboard(
+                deal,
+                role,
+                creative_version=creative_version,
+                draft_available=draft_available,
+            ),
+        )
     if state:
         if set_active:
             await _set_active_deal(message, state, deal, role, draft_available, creative_version)
