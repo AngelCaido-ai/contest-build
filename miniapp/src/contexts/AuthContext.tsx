@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE || ""}/auth/miniapp`,
+        `${import.meta.env.VITE_API_BASE || "https://85-239-58-214.nip.io"}/auth/miniapp`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

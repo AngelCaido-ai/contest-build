@@ -37,6 +37,28 @@ def get_current_user(
     return user
 
 
+def get_optional_current_user(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if not authorization:
+        return None
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    user = db.get(User, int(user_id))
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return user
+
+
 def get_bot_secret(x_bot_secret: str | None = Header(default=None)) -> None:
     if not x_bot_secret or x_bot_secret != settings.bot_secret:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

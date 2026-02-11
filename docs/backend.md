@@ -335,7 +335,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/listings/` | Создать листинг | JWT (owner) |
-| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`) | — |
+| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT при `exclude_own=true` |
 | `GET` | `/listings/{id}` | Получить листинг | — |
 | `PATCH` | `/listings/{id}` | Обновить листинг | JWT (owner) |
 

@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_optional_current_user
 from app.models.channel import Channel
 from app.models.listing import Listing
 from app.schemas.listing import ListingCreate, ListingOut, ListingUpdate
@@ -49,7 +49,9 @@ def list_listings(
     price_max: float | None = Query(default=None),
     active: bool | None = Query(default=None),
     channel_id: int | None = Query(default=None),
+    exclude_own: bool = Query(default=False),
     db: Session = Depends(get_db),
+    user=Depends(get_optional_current_user),
 ) -> list[ListingOut]:
     query = db.query(Listing)
     if active is not None:
@@ -60,6 +62,11 @@ def list_listings(
         query = query.filter(Listing.price_usd >= price_min)
     if price_max is not None:
         query = query.filter(Listing.price_usd <= price_max)
+    if exclude_own:
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        own_channel_ids = db.query(Channel.id).filter(Channel.owner_user_id == user.id)
+        query = query.filter(~Listing.channel_id.in_(own_channel_ids))
     items = query.all()
     return [ListingOut.model_validate(item) for item in items]
 

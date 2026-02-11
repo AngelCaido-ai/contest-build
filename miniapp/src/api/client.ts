@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_API_BASE || "https://85-239-58-214.nip.io";
 
 let authToken = localStorage.getItem("token") ?? "";
 

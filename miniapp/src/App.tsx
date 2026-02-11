@@ -21,6 +21,7 @@ export default function App() {
             <Route path="/deals" element={<DealsPage />} />
             <Route path="/deals/:id" element={<DealDetailPage />} />
             <Route path="/deals/:id/pay" element={<PaymentPage />} />
+            <Route path="*" element={<Navigate to="/listings" replace />} />
           </Route>
         </Routes>
       </AuthProvider>
