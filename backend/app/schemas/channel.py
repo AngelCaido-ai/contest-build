@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.channel_stats import ChannelStatsOut
+
 
 class ChannelCreate(BaseModel):
     tg_chat_id: int
@@ -50,5 +52,6 @@ class ChannelOut(BaseModel):
     bot_admin_status: bool
     rights_snapshot: dict | None
     created_at: datetime
+    stats: ChannelStatsOut | None = None
 
     model_config = ConfigDict(from_attributes=True)

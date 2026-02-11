@@ -330,6 +330,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `GET` | `/channels/{id}/managers` | Список менеджеров | JWT (owner) |
 | `DELETE` | `/channels/{id}/managers/{mid}` | Удалить менеджера | JWT (owner) |
 
+`GET /channels/` и `GET /channels/{id}` включают поле `stats` (если статистика для канала уже сохранена в `channel_stats`).
+
 ### Listings (`/listings`)
 
 | Метод | Путь | Описание | Авторизация |

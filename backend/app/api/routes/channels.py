@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
 from app.models.channel_manager import ChannelManager
+from app.models.channel_stats import ChannelStats
 from app.models.user import User
+from app.schemas.channel_stats import ChannelStatsOut
 from app.schemas.channel import (
     ChannelCreate,
     ChannelManagerCreate,
@@ -91,7 +93,15 @@ def list_channels(
         )
         .all()
     )
-    return [ChannelOut.model_validate(item) for item in items]
+    channel_ids = [c.id for c in items]
+    stats_rows = db.query(ChannelStats).filter(ChannelStats.channel_id.in_(channel_ids)).all() if channel_ids else []
+    stats_by_channel_id = {s.channel_id: s for s in stats_rows}
+    result = []
+    for item in items:
+        out = ChannelOut.model_validate(item)
+        stats = stats_by_channel_id.get(item.id)
+        result.append(out.model_copy(update={"stats": ChannelStatsOut.model_validate(stats) if stats else None}))
+    return result
 
 
 @router.get("/{channel_id}", response_model=ChannelOut)
@@ -103,7 +113,9 @@ def get_channel(
     channel = db.get(Channel, channel_id)
     if not channel or not _can_access_channel(db, channel, user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return ChannelOut.model_validate(channel)
+    stats = db.query(ChannelStats).filter(ChannelStats.channel_id == channel.id).first()
+    out = ChannelOut.model_validate(channel)
+    return out.model_copy(update={"stats": ChannelStatsOut.model_validate(stats) if stats else None})
 
 
 @router.patch("/{channel_id}", response_model=ChannelOut)
