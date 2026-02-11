@@ -13,7 +13,9 @@ from app.schemas.channel import (
     ChannelManagerOut,
     ChannelOut,
     ChannelUpdate,
+    TgAdminOut,
 )
+from app.services import telegram_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -108,6 +110,37 @@ def update_channel(
         raise
 
 
+@router.get("/{channel_id}/tg-admins", response_model=list[TgAdminOut])
+def list_tg_admins(
+    channel_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[TgAdminOut]:
+    channel = db.get(Channel, channel_id)
+    if not channel or channel.owner_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    admins = telegram_service.get_chat_administrators(channel.tg_chat_id)
+    if admins is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Не удалось получить список админов из Telegram",
+        )
+    result = []
+    for admin in admins:
+        tg_user = admin.get("user", {})
+        if tg_user.get("is_bot"):
+            continue
+        result.append(
+            TgAdminOut(
+                tg_user_id=tg_user.get("id", 0),
+                tg_username=tg_user.get("username"),
+                first_name=tg_user.get("first_name", ""),
+                status=admin.get("status", "administrator"),
+            )
+        )
+    return result
+
+
 @router.post("/{channel_id}/managers")
 def add_manager(
     channel_id: int,
@@ -118,8 +151,19 @@ def add_manager(
     channel = db.get(Channel, channel_id)
     if not channel or channel.owner_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    target_user_id = payload.user_id
-    if not target_user_id:
+    target_user: User | None = None
+    if payload.tg_user_id:
+        target_user = db.query(User).filter(User.tg_user_id == payload.tg_user_id).first()
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Пользователь не найден. Попросите его написать /start боту.",
+            )
+    elif payload.user_id:
+        target_user = db.get(User, payload.user_id)
+        if not target_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    elif payload.tg_username:
         username = _normalize_tg_username(payload.tg_username)
         if not username:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
@@ -127,16 +171,18 @@ def add_manager(
         if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found. Ask them to /start bot.",
+                detail="Пользователь не найден. Попросите его написать /start боту.",
             )
-        target_user_id = target_user.id
     else:
-        target_user = db.get(User, target_user_id)
-        if not target_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    if not telegram_service.is_chat_admin(channel.tg_chat_id, target_user.tg_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Пользователь не является админом этого канала",
+        )
     existing = (
         db.query(ChannelManager)
-        .filter(ChannelManager.channel_id == channel_id, ChannelManager.user_id == target_user_id)
+        .filter(ChannelManager.channel_id == channel_id, ChannelManager.user_id == target_user.id)
         .first()
     )
     if existing:
@@ -144,17 +190,17 @@ def add_manager(
     try:
         manager = ChannelManager(
             channel_id=channel_id,
-            user_id=target_user_id,
+            user_id=target_user.id,
             permissions=payload.permissions,
         )
         db.add(manager)
         db.commit()
-        logger.info("add_manager: success channel_id=%s target_user_id=%s", channel_id, target_user_id)
+        logger.info("add_manager: success channel_id=%s target_user_id=%s", channel_id, target_user.id)
         return {"status": "ok"}
     except HTTPException:
         raise
     except Exception:
-        logger.exception("add_manager: error channel_id=%s target_user_id=%s", channel_id, target_user_id)
+        logger.exception("add_manager: error channel_id=%s target_user_id=%s", channel_id, target_user.id)
         raise
 
 

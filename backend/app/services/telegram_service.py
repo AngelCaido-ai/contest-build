@@ -100,6 +100,25 @@ def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[st
     return first.get("message_id")
 
 
+def get_chat_administrators(chat_id: int) -> list[dict] | None:
+    if not settings.bot_token:
+        logger.warning("get_chat_administrators: bot_token not configured")
+        return None
+    result = _post("getChatAdministrators", {"chat_id": chat_id})
+    if not result or not isinstance(result, list):
+        logger.warning("get_chat_administrators: failed chat_id=%s", chat_id)
+        return None
+    logger.info("get_chat_administrators: chat_id=%s count=%s", chat_id, len(result))
+    return result
+
+
+def is_chat_admin(chat_id: int, tg_user_id: int) -> bool:
+    admins = get_chat_administrators(chat_id)
+    if admins is None:
+        return False
+    return any(a.get("user", {}).get("id") == tg_user_id for a in admins)
+
+
 def copy_message(from_chat_id: int, message_id: int, to_chat_id: int) -> bool:
     if not settings.bot_token:
         logger.warning("copy_message: bot_token not configured")

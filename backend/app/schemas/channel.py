@@ -20,6 +20,7 @@ class ChannelUpdate(BaseModel):
 
 class ChannelManagerCreate(BaseModel):
     user_id: int | None = None
+    tg_user_id: int | None = None
     tg_username: str | None = None
     permissions: dict | None = None
 
@@ -31,6 +32,13 @@ class ChannelManagerOut(BaseModel):
     tg_user_id: int
     tg_username: str | None
     permissions: dict | None = None
+
+
+class TgAdminOut(BaseModel):
+    tg_user_id: int
+    tg_username: str | None
+    first_name: str
+    status: str
 
 
 class ChannelOut(BaseModel):
