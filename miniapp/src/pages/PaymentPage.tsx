@@ -32,6 +32,20 @@ export function PaymentPage() {
   );
   const { data: escrow, loading, error } = useApi(fetcher, [id]);
 
+  const buildCommentPayload = async (comment: string) => {
+    const { Buffer } = await import("buffer");
+    (globalThis as any).Buffer ??= Buffer;
+
+    const tonCore = await import("@ton/core");
+    return tonCore
+      .beginCell()
+      .storeUint(0, 32)
+      .storeStringTail(comment)
+      .endCell()
+      .toBoc()
+      .toString("base64");
+  };
+
   const copyAddress = () => {
     if (escrow?.deposit_address) {
       navigator.clipboard.writeText(escrow.deposit_address);
@@ -48,13 +62,14 @@ export function PaymentPage() {
     setSending(true);
     try {
       const amountNano = Math.round((escrow.expected_amount ?? 0) * 1e9).toString();
+      const payload = escrow.deposit_comment ? await buildCommentPayload(escrow.deposit_comment) : undefined;
       await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.now() / 1000) + 600,
         messages: [
           {
             address: escrow.deposit_address,
             amount: amountNano,
-            ...(escrow.deposit_comment ? { payload: escrow.deposit_comment } : {}),
+            ...(payload ? { payload } : {}),
           },
         ],
       });

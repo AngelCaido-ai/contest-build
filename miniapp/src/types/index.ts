@@ -92,6 +92,13 @@ export type Manager = {
   permissions: Record<string, unknown> | null;
 };
 
+export type TgAdmin = {
+  tg_user_id: number;
+  tg_username: string | null;
+  first_name: string;
+  status: string;
+};
+
 export type DealEvent = {
   id: number;
   deal_id: number;

@@ -1,7 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Text,
-  Input,
   Button,
   Group,
   GroupItem,
@@ -11,7 +10,7 @@ import {
 import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { EmptyState } from "../components/EmptyState";
-import type { Channel, Manager } from "../types";
+import type { Channel, Manager, TgAdmin } from "../types";
 
 export function ChannelsPage() {
   const { showToast } = useToast();
@@ -19,10 +18,21 @@ export function ChannelsPage() {
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(null);
   const [managers, setManagers] = useState<Manager[]>([]);
   const [managersLoading, setManagersLoading] = useState(false);
-  const [managerUsername, setManagerUsername] = useState("");
+  const [tgAdmins, setTgAdmins] = useState<TgAdmin[]>([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
 
   const fetchChannels = useCallback(() => apiFetch<Channel[]>("/channels"), []);
   const { data: channels, loading } = useApi(fetchChannels, []);
+
+  const managerTgIds = useMemo(
+    () => new Set(managers.map((m) => m.tg_user_id)),
+    [managers],
+  );
+
+  const availableAdmins = useMemo(
+    () => tgAdmins.filter((a) => !managerTgIds.has(a.tg_user_id)),
+    [tgAdmins, managerTgIds],
+  );
 
   const loadManagers = async (channelId: number) => {
     setManagersLoading(true);
@@ -36,9 +46,22 @@ export function ChannelsPage() {
     }
   };
 
+  const loadTgAdmins = async (channelId: number) => {
+    setAdminsLoading(true);
+    try {
+      const items = await apiFetch<TgAdmin[]>(`/channels/${channelId}/tg-admins`);
+      setTgAdmins(items);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+    } finally {
+      setAdminsLoading(false);
+    }
+  };
+
   const selectChannel = (id: number) => {
     setSelectedChannelId(id);
     loadManagers(id);
+    loadTgAdmins(id);
   };
 
   const refreshStats = async (channelId: number) => {
@@ -50,19 +73,13 @@ export function ChannelsPage() {
     }
   };
 
-  const addManager = async () => {
+  const addManager = async (admin: TgAdmin) => {
     if (!selectedChannelId) return;
-    const username = managerUsername.trim();
-    if (!username) {
-      showToast("Введите @username", { type: "error" });
-      return;
-    }
     try {
       await apiFetch(`/channels/${selectedChannelId}/managers`, {
         method: "POST",
-        body: JSON.stringify({ tg_username: username }),
+        body: JSON.stringify({ tg_user_id: admin.tg_user_id }),
       });
-      setManagerUsername("");
       showToast("Менеджер добавлен", { type: "success" });
       await loadManagers(selectedChannelId);
     } catch (e) {
@@ -136,31 +153,16 @@ export function ChannelsPage() {
 
       {selectedChannelId && (
         <>
-          <Group header="Менеджеры">
-            <div className="flex gap-2 px-4 py-2">
-              <Input
-                placeholder="@username"
-                value={managerUsername}
-                onChange={(v) => setManagerUsername(v)}
-              />
-              <Button text="Добавить" type="primary" onClick={addManager} />
-            </div>
-          </Group>
-
-          {managersLoading && (
-            <Group>
+          {managersLoading ? (
+            <Group header="Менеджеры">
               <GroupItem
                 text={<SkeletonElement style={{ width: "50%", height: 16 }} />}
               />
             </Group>
-          )}
-
-          {!managersLoading && managers.length === 0 && (
+          ) : managers.length === 0 ? (
             <EmptyState icon="👤" title="Нет менеджеров" />
-          )}
-
-          {!managersLoading && managers.length > 0 && (
-            <Group>
+          ) : (
+            <Group header="Менеджеры">
               {managers.map((m) => (
                 <GroupItem
                   key={m.id}
@@ -176,6 +178,44 @@ export function ChannelsPage() {
               ))}
             </Group>
           )}
+
+          {adminsLoading ? (
+            <Group header="Админы канала">
+              <GroupItem
+                text={<SkeletonElement style={{ width: "50%", height: 16 }} />}
+              />
+            </Group>
+          ) : availableAdmins.length > 0 ? (
+            <Group header="Админы канала">
+              {availableAdmins.map((a) => (
+                <GroupItem
+                  key={a.tg_user_id}
+                  text={a.first_name}
+                  description={
+                    a.tg_username
+                      ? `@${a.tg_username} · ${a.status === "creator" ? "владелец" : "админ"}`
+                      : a.status === "creator"
+                        ? "владелец"
+                        : "админ"
+                  }
+                  after={
+                    <Button
+                      text="Назначить"
+                      type="primary"
+                      onClick={() => addManager(a)}
+                    />
+                  }
+                />
+              ))}
+            </Group>
+          ) : !adminsLoading && tgAdmins.length > 0 ? (
+            <Text
+              type="caption"
+              style={{ color: "var(--tg-theme-hint-color)", textAlign: "center" }}
+            >
+              Все админы канала уже назначены менеджерами
+            </Text>
+          ) : null}
         </>
       )}
     </div>

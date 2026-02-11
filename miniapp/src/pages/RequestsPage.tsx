@@ -12,7 +12,7 @@ import {
 import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { EmptyState } from "../components/EmptyState";
-import type { RequestItem } from "../types";
+import type { RequestItem, Channel } from "../types";
 
 export function RequestsPage() {
   const { showToast } = useToast();
@@ -20,6 +20,9 @@ export function RequestsPage() {
 
   const [budgetMin, setBudgetMin] = useState("");
   const [budgetMax, setBudgetMax] = useState("");
+
+  const fetchChannels = useCallback(() => apiFetch<Channel[]>("/channels"), []);
+  const { data: channels } = useApi(fetchChannels, []);
 
   const fetcher = useCallback(() => {
     const params = new URLSearchParams();
@@ -32,10 +35,15 @@ export function RequestsPage() {
   const { data: requests, loading, refetch } = useApi(fetcher, [budgetMin, budgetMax]);
 
   const respondToRequest = async (requestId: number) => {
+    if (!channels || channels.length === 0) {
+      showToast("Сначала добавьте канал", { type: "error" });
+      return;
+    }
+    const channelId = channels[0].id;
     try {
       const deal = await apiFetch<{ id: number }>("/deals", {
         method: "POST",
-        body: JSON.stringify({ request_id: requestId }),
+        body: JSON.stringify({ request_id: requestId, channel_id: channelId }),
       });
       showToast("Сделка создана", { type: "success" });
       navigate(`/deals/${deal.id}`);

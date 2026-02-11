@@ -6,7 +6,10 @@ import "@telegram-tools/ui-kit/dist/index.css";
 import App from "./App";
 import "./index.css";
 
-const manifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
+const manifestUrl = new URL(
+  "tonconnect-manifest.json",
+  `${window.location.origin}${import.meta.env.BASE_URL}`,
+).toString();
 
 const root = document.getElementById("root");
 if (root) {

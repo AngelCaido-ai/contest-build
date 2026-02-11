@@ -10,13 +10,16 @@
   },
   "dependencies": {
     "@telegram-tools/ui-kit": "^0.2.4",
+    "@ton/core": "^0.63.1",
     "@tonconnect/ui-react": "^2.4.1",
+    "buffer": "^6.0.3",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.13.0"
   },
   "devDependencies": {
+    "@types/node": "^25.2.3",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
