@@ -34,6 +34,7 @@ backend/
 │   │       └── stats.py           # Статистика каналов
 │   ├── core/
 │   │   ├── config.py              # Settings (pydantic-settings)
+│   │   ├── rate_limit.py          # Rate limiting (slowapi + Redis)
 │   │   └── security.py            # JWT, verify_init_data
 │   ├── db/
 │   │   ├── base.py                # DeclarativeBase
@@ -117,6 +118,8 @@ backend/
 | `VERIFICATION_WINDOW_MINUTES` | `int` | `60` | Окно верификации поста (60 мин) |
 | `SWEEP_DELAY_MINUTES` | `int` | `5` | Задержка перед sweep после release/refund |
 | `SWEEP_MIN_BALANCE_TON` | `float` | `0.005` | Минимальный баланс для sweep (если меньше — комиссия съест всё) |
+| `RATE_LIMIT_ESCROW_DEPOSIT` | `str` | `10/minute` | Лимит для `POST /escrow/deals/{id}/deposit` (ключ `user_id` из JWT) |
+| `RATE_LIMIT_ESCROW_BOT` | `str` | `20/minute` | Лимит для escrow bot-only эндпоинтов и `POST /bot/deals/{id}/deposit` (ключ IP) |
 
 ---
 
@@ -141,6 +144,16 @@ backend/
 ### Защита эндпоинтов бота
 
 Все роуты `/bot/*` защищены зависимостью `get_bot_secret` — проверка заголовка `X-Bot-Secret`.
+
+### Rate limiting финансовых эндпоинтов
+
+- Реализован через `slowapi` с Redis storage (`REDIS_URL`)
+- `POST /escrow/deals/{id}/deposit` — лимит `RATE_LIMIT_ESCROW_DEPOSIT`, ключ: `user_id` из JWT
+- `POST /escrow/deals/{id}/confirm` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
+- `POST /escrow/deals/{id}/release` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
+- `POST /escrow/deals/{id}/refund` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
+- `POST /bot/deals/{id}/deposit` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
+- При превышении лимита API возвращает `429 Too Many Requests`
 
 ---
 

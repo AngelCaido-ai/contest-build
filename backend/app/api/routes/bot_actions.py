@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request as FastAPIRequest, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 from app.api.deps import get_bot_secret, get_db
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models.channel import Channel
 from app.models.channel_manager import ChannelManager
 from app.models.creative import Creative
@@ -441,7 +443,13 @@ def bot_create_deal(payload: BotDealCreate, db: Session = Depends(get_db)) -> De
 
 
 @router.post("/deals/{deal_id}/deposit", response_model=EscrowOut, dependencies=[Depends(get_bot_secret)])
-def bot_create_deposit(deal_id: int, payload: BotEscrowDepositRequest, db: Session = Depends(get_db)) -> EscrowOut:
+@limiter.limit(settings.rate_limit_escrow_bot)
+def bot_create_deposit(
+    request: FastAPIRequest,
+    deal_id: int,
+    payload: BotEscrowDepositRequest,
+    db: Session = Depends(get_db),
+) -> EscrowOut:
     deal = db.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

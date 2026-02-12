@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     verification_window_minutes: int = 60
     sweep_delay_minutes: int = 5
     sweep_min_balance_ton: float = 0.005
+    rate_limit_escrow_deposit: str = "10/minute"
+    rate_limit_escrow_bot: str = "20/minute"
 
     @field_validator("telethon_api_id", "bot_log_chat_id", "ton_wallet_id", "ton_wallet_subwallet", mode="before")
     @classmethod

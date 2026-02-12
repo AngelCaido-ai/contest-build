@@ -1,9 +1,11 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_bot_secret, get_current_user, get_db
+from app.core.config import settings
+from app.core.rate_limit import get_user_id_key, limiter
 from app.models.channel import Channel
 from app.models.deal import Deal
 from app.models.escrow_payment import EscrowPayment
@@ -22,7 +24,9 @@ router = APIRouter()
 
 
 @router.post("/deals/{deal_id}/deposit", response_model=EscrowOut)
+@limiter.limit(settings.rate_limit_escrow_deposit, key_func=get_user_id_key)
 def create_deposit_address(
+    request: Request,
     deal_id: int,
     payload: EscrowDepositRequest,
     db: Session = Depends(get_db),
@@ -55,7 +59,9 @@ def create_deposit_address(
     response_model=EscrowOut,
     dependencies=[Depends(get_bot_secret)],
 )
+@limiter.limit(settings.rate_limit_escrow_bot)
 def confirm_deposit(
+    request: Request,
     deal_id: int,
     payload: EscrowConfirmRequest,
     db: Session = Depends(get_db),
@@ -82,7 +88,9 @@ def confirm_deposit(
     response_model=EscrowOut,
     dependencies=[Depends(get_bot_secret)],
 )
+@limiter.limit(settings.rate_limit_escrow_bot)
 def release_escrow(
+    request: Request,
     deal_id: int,
     payload: EscrowReleaseRequest,
     db: Session = Depends(get_db),
@@ -110,7 +118,9 @@ def release_escrow(
     response_model=EscrowOut,
     dependencies=[Depends(get_bot_secret)],
 )
+@limiter.limit(settings.rate_limit_escrow_bot)
 def refund_escrow(
+    request: Request,
     deal_id: int,
     payload: EscrowRefundRequest,
     db: Session = Depends(get_db),

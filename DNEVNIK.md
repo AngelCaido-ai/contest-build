@@ -1,6 +1,8 @@
 # Дневник изменений
 
 ## docs
+- 2026-02-12: Обновлён `docs/backend.md` — добавлен `core/rate_limit.py`, новые env-переменные `RATE_LIMIT_ESCROW_DEPOSIT`/`RATE_LIMIT_ESCROW_BOT` и секция по rate limiting финансовых эндпоинтов escrow/bot.
+- 2026-02-12: Обновлён `docs/next-steps.md` — задача rate limiting на escrow-эндпоинты отмечена выполненной.
 - 2026-02-11: Обновлён `docs/backend.md` — добавлено описание sweep остатков escrow (поля, миграция, конфиг, фоновая задача).
 - 2026-02-11: Создан `docs/deploy.md` — инструкция по деплою на сервер (архитектура, сервисы, варианты деплоя, откат, проверка).
 - 2026-02-11: Обновлён `docs/backend.md` — `GET /listings/{id}` описан как endpoint для предпросмотра листинга с preview канала и статистикой (если есть).
@@ -10,6 +12,7 @@
 - 2026-02-09: Обновлён `docs/bot.md` — добавлены новые шаги отклика на листинг и эндпоинт брифа рекламодателя.
 
 ## backend
+- 2026-02-12: Добавлен rate limiting финансовых эндпоинтов через `slowapi` + Redis: `POST /escrow/deals/{id}/deposit` (ключ `user_id`), `POST /escrow/deals/{id}/confirm|release|refund` и `POST /bot/deals/{id}/deposit` (ключ IP). Добавлены настройки `RATE_LIMIT_ESCROW_DEPOSIT` (`10/minute`) и `RATE_LIMIT_ESCROW_BOT` (`20/minute`).
 - 2026-02-11: В `stats_service.py` добавлен фоллбэк расчёт `views_per_post` из последних 20 постов канала (`_avg_views_from_posts`), если `GetBroadcastStatsRequest` возвращает 0 (Telegram отдаёт среднее за период, без новых постов = 0). Значения `subscribers`/`views_per_post` приводятся к `int` перед записью в БД.
 - 2026-02-11: Добавлено логирование в `stats_service.py` и `stats.py` — сырой ответ MTProto, причина fallback на Bot API, расчёт views из постов.
 - 2026-02-11: Добавлен sweep остатков escrow: модель `EscrowPayment` расширена полями `sweep_tx_hash`, `swept_at`, добавлена миграция `0006_sweep_fields`, фоновая задача `sweep_completed_deposits`, TON-отправка `send_sweep` с `send_mode=128` и настройки `SWEEP_DELAY_MINUTES`, `SWEEP_MIN_BALANCE_TON`.
@@ -152,3 +155,4 @@
 - 2026-01-27: README дополнен инструкцией запуска всех сервисов в Docker.
 - 2026-01-27: В следующем шаге эскроу добавлена задача про отдельный модуль с публичными методами для backend.
 - 2026-02-04: В требования добавлены уточнения по MVP, prod-ready, гранту, IP и призам.
+- 2026-02-12: Создан `docs/sentry.md` — обоснование внедрения Sentry, план интеграции по каждому сервису, конфигурация и оценка трудозатрат.

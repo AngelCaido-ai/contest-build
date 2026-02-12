@@ -8,6 +8,7 @@ psycopg2-binary==2.9.9
 redis==5.0.8
 rq==2.0.0
 rq-scheduler==0.14.0
+slowapi
 requests==2.32.3
 python-jose==3.3.0
 telethon==1.36.0
