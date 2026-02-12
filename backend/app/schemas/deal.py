@@ -35,6 +35,12 @@ class DealStatusUpdate(BaseModel):
     status: DealStatus
 
 
+class DealAdvertiserBriefCreate(BaseModel):
+    text: str | None = None
+    publish_at: datetime | None = None
+    media_file_ids: list[dict] | list[str] | None = None
+
+
 class DealOut(BaseModel):
     id: int
     listing_id: int | None

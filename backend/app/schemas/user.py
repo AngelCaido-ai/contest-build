@@ -17,3 +17,7 @@ class UserOut(BaseModel):
 class UserWalletUpdate(BaseModel):
     actor_tg_user_id: int | None = None
     linked_wallet: str | None = None
+
+
+class UserWalletSet(BaseModel):
+    linked_wallet: str | None = None

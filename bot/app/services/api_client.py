@@ -196,6 +196,47 @@ def create_advertiser_brief(deal_id: int, payload: dict) -> dict:
         raise
 
 
+def create_deal_message(deal_id: int, payload: dict) -> dict:
+    logger.info("create_deal_message: deal_id=%s", deal_id)
+    try:
+        resp = requests.post(
+            _url(f"/bot/deals/{deal_id}/messages"),
+            json=payload,
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        logger.info("create_deal_message: success deal_id=%s", deal_id)
+        return resp.json()
+    except Exception:
+        logger.exception("create_deal_message: error deal_id=%s", deal_id)
+        raise
+
+
+def list_deal_messages(
+    deal_id: int,
+    tg_user_id: int,
+    *,
+    limit: int = 10,
+    before_id: int | None = None,
+) -> list[dict]:
+    logger.info("list_deal_messages: deal_id=%s tg_user_id=%s", deal_id, tg_user_id)
+    params: dict[str, object] = {"tg_user_id": tg_user_id, "limit": limit}
+    if before_id is not None:
+        params["before_id"] = before_id
+    try:
+        resp = requests.get(
+            _url(f"/bot/deals/{deal_id}/messages"),
+            params=params,
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        logger.info("list_deal_messages: success deal_id=%s count=%s", deal_id, len(resp.json()))
+        return resp.json()
+    except Exception:
+        logger.exception("list_deal_messages: error deal_id=%s", deal_id)
+        raise
+
+
 def mark_tamper(channel_tg_chat_id: int, message_id: int) -> None:
     logger.info("mark_tamper: channel=%s message=%s", channel_tg_chat_id, message_id)
     try:

@@ -3,11 +3,11 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_bot_secret, get_db
+from app.api.deps import get_bot_secret, get_current_user, get_db
 from app.core.security import create_access_token, verify_init_data
 from app.models.user import User
 from app.schemas.auth import AuthRequest, AuthResponse, BotAuthRequest
-from app.schemas.user import UserOut
+from app.schemas.user import UserOut, UserWalletSet
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -89,3 +89,23 @@ def auth_bot(payload: BotAuthRequest, db: Session = Depends(get_db)) -> AuthResp
     except Exception:
         logger.exception("bot auth: error tg_user_id=%s", payload.tg_user_id)
         raise
+
+
+@router.get("/me", response_model=UserOut)
+def auth_me(user=Depends(get_current_user)) -> UserOut:
+    return UserOut.model_validate(user)
+
+
+@router.post("/me/wallet", response_model=UserOut)
+def auth_set_wallet(
+    payload: UserWalletSet,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+) -> UserOut:
+    wallet = (payload.linked_wallet or "").strip()
+    if not wallet:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="linked_wallet is required")
+    user.linked_wallet = wallet
+    db.commit()
+    db.refresh(user)
+    return UserOut.model_validate(user)

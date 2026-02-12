@@ -44,6 +44,10 @@ DEAL_CREATIVE_STATUS_BACK_PREFIX = "deal_creative_status_back:"
 DEAL_CREATIVE_STATUS_CANCEL_PREFIX = "deal_creative_status_cancel:"
 DEAL_CREATIVE_VIEW_PREFIX = "deal_creative_view:"
 DEAL_CREATIVE_PREVIOUS_PREFIX = "deal_creative_previous:"
+DEAL_MESSAGE_PREFIX = "deal_msg:"
+DEAL_MESSAGE_BACK_PREFIX = "deal_msg_back:"
+DEAL_MESSAGE_CANCEL_PREFIX = "deal_msg_cancel:"
+DEAL_MESSAGE_HISTORY_PREFIX = "deal_msg_history:"
 DEAL_SWITCH_PREFIX = "deal_switch:"
 DEAL_DRAFT_RESUME_PREFIX = "deal_draft_resume:"
 DEAL_DRAFT_CLEAR_PREFIX = "deal_draft_clear:"
@@ -173,6 +177,10 @@ class CreativeStatusState(StatesGroup):
 CREATIVE_STATUS_ORDER = ["DRAFT", "REVIEW", "APPROVED"]
 
 
+class DealMessageState(StatesGroup):
+    content = State()
+
+
 class DealSwitchState(StatesGroup):
     confirm = State()
 
@@ -198,6 +206,7 @@ DEAL_FLOW_STATES = {
     CreativeStatusState.status.state,
     CreativeStatusState.comment.state,
     CreativeStatusState.publish_at.state,
+    DealMessageState.content.state,
 }
 
 
@@ -424,6 +433,7 @@ def _state_by_name(value: str) -> State | None:
         CreativeStatusState.status.state: CreativeStatusState.status,
         CreativeStatusState.comment.state: CreativeStatusState.comment,
         CreativeStatusState.publish_at.state: CreativeStatusState.publish_at,
+        DealMessageState.content.state: DealMessageState.content,
     }
     return mapping.get(value)
 
@@ -549,6 +559,9 @@ def _deal_actions_keyboard(
         builder.button(text="Create creative", callback_data=f"{DEAL_CREATIVE_PREFIX}{deal_id}")
     if role == ROLE_ADVERTISER and status in {"CREATIVE_REVIEW"}:
         builder.button(text="Creative status", callback_data=f"{DEAL_CREATIVE_STATUS_PREFIX}{deal_id}")
+    if role in {ROLE_ADVERTISER, ROLE_OWNER} and status not in {"RELEASED", "REFUNDED", "CANCELED"}:
+        builder.button(text="Написать сообщение", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
+        builder.button(text="История переписки", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}")
     if (
         role == ROLE_OWNER
         and not publish_at
@@ -611,6 +624,55 @@ def _normalize_datetime(value: str) -> str | None:
     return text
 
 
+def _format_message_time(value: str | None) -> str:
+    if not value:
+        return "-"
+    normalized = value.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return value
+    return dt.strftime("%d.%m %H:%M")
+
+
+def _message_sender_label(value: str | None) -> str:
+    if value == ROLE_ADVERTISER:
+        return "Рекламодатель"
+    if value == ROLE_OWNER:
+        return "Владелец"
+    return "Участник"
+
+
+def _message_history_text(items: list[dict]) -> str:
+    lines = ["История переписки:"]
+    for item in items:
+        payload = item.get("payload") or {}
+        sender_role = payload.get("sender_role")
+        sender = _message_sender_label(sender_role if isinstance(sender_role, str) else None)
+        text_value = payload.get("text")
+        text = text_value.strip() if isinstance(text_value, str) else ""
+        media_items = payload.get("media_file_ids") or []
+        if text and len(text) > 180:
+            text = f"{text[:177]}..."
+        if not text and media_items:
+            text = "[медиа]"
+        if not text:
+            text = "[пусто]"
+        lines.append(f"{_format_message_time(item.get('created_at'))} {sender}: {text}")
+    return "\n".join(lines)
+
+
+def _message_history_keyboard(deal_id: int, before_id: int | None, has_more: bool):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Ответить", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
+    if has_more and before_id is not None:
+        builder.button(text="Еще", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}:{before_id}")
+    builder.button(text="К сделке", callback_data=f"{DEAL_PREFIX}{deal_id}")
+    builder.button(text="К списку", callback_data="menu:deals")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
 async def _prompt_terms_price(message: Message, deal_id: int) -> None:
     await message.answer("Enter price.", reply_markup=_terms_keyboard(deal_id, "details"))
 
@@ -653,6 +715,16 @@ async def _prompt_creative_status_publish_at(message: Message, deal_id: int) -> 
         reply_markup=_nav_keyboard(
             f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}",
             f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}",
+        ),
+    )
+
+
+async def _prompt_deal_message(message: Message, deal_id: int) -> None:
+    await message.answer(
+        "Отправьте сообщение или медиа.",
+        reply_markup=_nav_keyboard(
+            f"{DEAL_MESSAGE_BACK_PREFIX}{deal_id}",
+            f"{DEAL_MESSAGE_CANCEL_PREFIX}{deal_id}",
         ),
     )
 
@@ -1336,6 +1408,152 @@ async def deal_status_value(message: Message, state: FSMContext) -> None:
     await _clear_deal_draft(state, deal_id)
     await _clear_state_keep(state)
     await _send_deal_details(message, deal_id, state=state)
+
+
+@router.callback_query(F.data.startswith(DEAL_MESSAGE_PREFIX))
+async def deal_message_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    if await _maybe_prompt_deal_switch(callback.message, state, deal_id):
+        await callback.answer()
+        return
+    try:
+        deal = api_client.get_deal(deal_id)
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load deal: {exc}")
+        await callback.answer()
+        return
+    status = (deal.get("status") or "").upper()
+    if status in {"RELEASED", "REFUNDED", "CANCELED"}:
+        await callback.message.answer("Сделка завершена. Переписка недоступна.")
+        await callback.answer()
+        return
+    role = _resolve_deal_role(callback.from_user.id, deal)
+    draft_available = await _get_deal_draft(state, deal_id) is not None
+    await _set_active_deal(callback.message, state, deal, role, draft_available)
+    await state.update_data(deal_id=deal_id)
+    await state.set_state(DealMessageState.content)
+    await _prompt_deal_message(callback.message, deal_id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_MESSAGE_BACK_PREFIX))
+async def deal_message_back(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    if await state.get_state():
+        await _clear_state_keep(state)
+    await _send_deal_details(callback.message, deal_id, callback.from_user.id, state=state)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_MESSAGE_CANCEL_PREFIX))
+async def deal_message_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    deal_id = int(callback.data.split(":", 1)[1])
+    if await state.get_state():
+        await _clear_state_keep(state)
+    await _send_deal_details(callback.message, deal_id, callback.from_user.id, state=state)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(DEAL_MESSAGE_HISTORY_PREFIX))
+async def deal_message_history(callback: CallbackQuery) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    payload = callback.data[len(DEAL_MESSAGE_HISTORY_PREFIX) :]
+    if not payload:
+        await callback.answer()
+        return
+    parts = payload.split(":", 1)
+    try:
+        deal_id = int(parts[0])
+    except ValueError:
+        await callback.answer()
+        return
+    before_id = None
+    if len(parts) == 2 and parts[1]:
+        try:
+            before_id = int(parts[1])
+        except ValueError:
+            before_id = None
+    try:
+        items = api_client.list_deal_messages(
+            deal_id,
+            callback.from_user.id,
+            limit=8,
+            before_id=before_id,
+        )
+    except Exception as exc:
+        await callback.message.answer(f"Failed to load messages: {exc}")
+        await callback.answer()
+        return
+    if not items:
+        await callback.message.answer(
+            "Сообщений пока нет.",
+            reply_markup=_message_history_keyboard(deal_id, None, False),
+        )
+        await callback.answer()
+        return
+    oldest_id = None
+    first_id = items[0].get("id")
+    if isinstance(first_id, int):
+        oldest_id = first_id
+    has_more = len(items) >= 8 and oldest_id is not None
+    await callback.message.answer(
+        _message_history_text(items),
+        reply_markup=_message_history_keyboard(deal_id, oldest_id, has_more),
+    )
+    await callback.answer()
+
+
+@router.message(DealMessageState.content)
+async def deal_message_content(message: Message, state: FSMContext) -> None:
+    text = None
+    if message.text:
+        text = message.text
+    if message.caption:
+        text = message.caption
+    media_file_ids = None
+    if message.photo:
+        media_file_ids = [{"type": "photo", "file_id": message.photo[-1].file_id}]
+    if message.video:
+        media_file_ids = [{"type": "video", "file_id": message.video.file_id}]
+    if message.animation:
+        media_file_ids = [{"type": "animation", "file_id": message.animation.file_id}]
+    if message.document:
+        media_file_ids = [{"type": "document", "file_id": message.document.file_id}]
+    if not text and not media_file_ids:
+        await message.answer("Отправьте текст или медиа.")
+        return
+    data = await state.get_data()
+    deal_id = data.get("deal_id")
+    if deal_id is None:
+        await message.answer("Deal is required.")
+        await _clear_state_keep(state)
+        return
+    try:
+        api_client.create_deal_message(
+            int(deal_id),
+            {
+                "actor_tg_user_id": message.from_user.id,
+                "text": text,
+                "media_file_ids": media_file_ids,
+            },
+        )
+        await message.answer("Сообщение отправлено.")
+    except Exception as exc:
+        await message.answer(f"Failed to send message: {exc}")
+    await _clear_deal_draft(state, int(deal_id))
+    await _clear_state_keep(state)
+    await _send_deal_details(message, int(deal_id), state=state)
 
 
 @router.callback_query(F.data.startswith(DEAL_CREATIVE_PREFIX))

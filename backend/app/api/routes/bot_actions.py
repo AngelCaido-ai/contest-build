@@ -21,6 +21,7 @@ from app.models.request import Request
 from app.models.enums import CreativeStatus, DealStatus
 from app.models.user import User
 from app.schemas.bot import (
+    BotDealMessageCreate,
     BotChannelCreate,
     BotDealCreate,
     BotAdvertiserBrief,
@@ -61,6 +62,12 @@ ROLE_ALLOWED_STATUSES: dict[str, set[DealStatus]] = {
         DealStatus.FUNDED,
         DealStatus.CANCELED,
     },
+}
+
+FINAL_DEAL_STATUSES = {
+    DealStatus.RELEASED,
+    DealStatus.REFUNDED,
+    DealStatus.CANCELED,
 }
 
 
@@ -223,6 +230,49 @@ def _deal_action_keyboard(deal: Deal, role: str) -> dict | None:
     if role == ROLE_ADVERTISER and deal.status in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:
         buttons.append([{"text": "Payment details", "callback_data": f"deal_payment:{deal.id}"}])
     return {"inline_keyboard": buttons}
+
+
+def _message_action_keyboard(deal_id: int) -> dict:
+    return {
+        "inline_keyboard": [
+            [{"text": "Open deal", "callback_data": f"deal:{deal_id}"}],
+            [
+                {"text": "Reply", "callback_data": f"deal_msg:{deal_id}"},
+                {"text": "History", "callback_data": f"deal_msg_history:{deal_id}"},
+            ],
+        ]
+    }
+
+
+def _notify_message_counterparty(
+    db: Session,
+    deal: Deal,
+    sender_role: str,
+    text: str | None,
+    media_file_ids: list[dict] | None,
+) -> None:
+    channel = db.get(Channel, deal.channel_id)
+    owner = db.get(User, channel.owner_user_id) if channel else None
+    advertiser = db.get(User, deal.advertiser_id)
+    if sender_role == ROLE_ADVERTISER:
+        target = owner
+        sender_label = "advertiser"
+    else:
+        target = advertiser
+        sender_label = "owner"
+    if not target or not target.tg_user_id:
+        return
+    preview = (text or "").strip()
+    header = f"Deal #{deal.id}: new message from {sender_label}."
+    if preview:
+        if len(preview) > 180:
+            preview = f"{preview[:177]}..."
+        header = f"{header}\n{preview}"
+    elif media_file_ids:
+        header = f"{header}\nMedia attached."
+    send_message(int(target.tg_user_id), header, reply_markup=_message_action_keyboard(deal.id))
+    if media_file_ids:
+        send_media(int(target.tg_user_id), text, media_file_ids)
 
 
 def _send_deal_notification(db: Session, deal: Deal, user: User, role: str, text: str) -> None:
@@ -767,6 +817,67 @@ def bot_add_advertiser_brief(
         send_media(int(owner.tg_user_id), "\n".join(lines), payload.media_file_ids)
         _send_deal_notification(db, deal, owner, ROLE_OWNER, f"Deal #{deal.id}: advertiser brief received.")
     return DealEventOut.model_validate(event)
+
+
+@router.post(
+    "/deals/{deal_id}/messages",
+    response_model=DealEventOut,
+    dependencies=[Depends(get_bot_secret)],
+)
+def bot_create_deal_message(
+    deal_id: int,
+    payload: BotDealMessageCreate,
+    db: Session = Depends(get_db),
+) -> DealEventOut:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if not payload.actor_tg_user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+    if deal.status in FINAL_DEAL_STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deal is already closed")
+    sender_role = _get_deal_role(db, deal, payload.actor_tg_user_id)
+    text = (payload.text or "").strip() or None
+    media_file_ids = payload.media_file_ids or None
+    if not text and not media_file_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="text or media_file_ids is required")
+    event_payload: dict = {
+        "text": text,
+        "media_file_ids": media_file_ids,
+        "sender_role": sender_role,
+    }
+    if payload.reply_to_event_id is not None:
+        event_payload["reply_to_event_id"] = payload.reply_to_event_id
+    event = DealEvent(deal_id=deal_id, type="MESSAGE", payload=event_payload)
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    _notify_message_counterparty(db, deal, sender_role, text, media_file_ids)
+    return DealEventOut.model_validate(event)
+
+
+@router.get(
+    "/deals/{deal_id}/messages",
+    response_model=list[DealEventOut],
+    dependencies=[Depends(get_bot_secret)],
+)
+def bot_list_deal_messages(
+    deal_id: int,
+    tg_user_id: int,
+    limit: int = Query(20, ge=1, le=50),
+    before_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+) -> list[DealEventOut]:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    _get_deal_role_flags(db, deal, tg_user_id)
+    query = db.query(DealEvent).filter(DealEvent.deal_id == deal_id, DealEvent.type == "MESSAGE")
+    if before_id is not None:
+        query = query.filter(DealEvent.id < before_id)
+    items = query.order_by(DealEvent.id.desc()).limit(limit).all()
+    items.reverse()
+    return [DealEventOut.model_validate(item) for item in items]
 
 
 @router.get(

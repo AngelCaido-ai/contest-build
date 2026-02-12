@@ -34,6 +34,7 @@ export function RequestsPage() {
       <Text type="title2" weight="bold">
         Заявки рекламодателей
       </Text>
+      <Button text="Создать заявку" type="primary" onClick={() => navigate("/requests/new")} />
 
       <Group header="Фильтры">
         <div className="flex gap-2 px-4 py-2">
