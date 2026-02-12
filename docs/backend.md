@@ -322,6 +322,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 |---|---|---|
 | `POST` | `/auth/miniapp` | Авторизация через Telegram Web App `init_data` |
 | `POST` | `/auth/bot` | Авторизация от бота (`X-Bot-Secret`) |
+| `GET` | `/auth/me` | Текущий пользователь по JWT |
+| `POST` | `/auth/me/wallet` | Обновить payout-кошелёк текущего пользователя |
 
 ### Channels (`/channels`)
 
@@ -364,6 +366,14 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/deals/` | Создать сделку (из листинга или заявки); 409 если по листингу уже есть активная сделка | JWT |
 | `GET` | `/deals/` | Список сделок текущего пользователя | JWT |
 | `GET` | `/deals/{id}` | Получить сделку | JWT (участник) |
+| `POST` | `/deals/{id}/terms` | Зафиксировать условия сделки | JWT (owner/manager) |
+| `POST` | `/deals/{id}/publish_at` | Установить publish_at | JWT (owner/manager) |
+| `POST` | `/deals/{id}/status` | Изменить статус сделки | JWT (зависит от роли и переходов) |
+| `POST` | `/deals/{id}/creative` | Отправить креатив | JWT (owner/manager) |
+| `GET` | `/deals/{id}/creative` | Получить креатив (последний или по `version`) | JWT (участник) |
+| `POST` | `/deals/{id}/creative/status` | Ревью креатива (APPROVED/DRAFT) | JWT (advertiser) |
+| `POST` | `/deals/{id}/advertiser_brief` | Отправить бриф рекламодателя (text/media/publish_at) | JWT (advertiser) |
+| `POST` | `/deals/media/upload` | Загрузить файл в Telegram и получить `file_id` для media_file_ids | JWT |
 
 `GET /deals/{id}` возвращает расширенный объект (поверх базовой схемы сделки), чтобы Mini App мог показать больше контекста без дополнительных запросов.
 
@@ -410,6 +420,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/bot/deals/{id}/creative` | Создать/отправить креатив |
 | `POST` | `/bot/deals/{id}/creative/status` | Обновить статус креатива (approve/reject) |
 | `GET` | `/bot/deals/{id}/creative` | Получить креатив (последний или по версии) |
+| `POST` | `/bot/deals/{id}/messages` | Отправить сообщение по сделке (text/media) |
+| `GET` | `/bot/deals/{id}/messages` | Получить историю сообщений по сделке |
 | `POST` | `/bot/deals/{id}/advertiser_brief` | Бриф рекламодателя с медиа и пожеланием publish_at |
 | `POST` | `/bot/deals/{id}/events` | Добавить событие сделки |
 | `POST` | `/bot/tamper` | Отметить пост как изменённый |

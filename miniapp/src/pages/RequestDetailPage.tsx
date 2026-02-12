@@ -4,6 +4,7 @@ import {
   Button,
   Group,
   GroupItem,
+  Input,
   Select,
   Spinner,
   Text,
@@ -13,6 +14,7 @@ import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
 import type { Channel, RequestItem } from "../types";
+import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
 
 function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -47,6 +49,11 @@ export function RequestDetailPage() {
   } = useApi(fetchChannels, []);
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [dealPrice, setDealPrice] = useState("");
+  const [dealFormat, setDealFormat] = useState("post");
+  const [publishAt, setPublishAt] = useState("");
+  const [verificationWindow, setVerificationWindow] = useState("");
+  const [brief, setBrief] = useState("");
 
   const selectedChannel = useMemo(() => {
     if (!channels || channels.length === 0) return null;
@@ -83,9 +90,28 @@ export function RequestDetailPage() {
       return;
     }
     try {
+      const parsedPrice = dealPrice.trim() ? Number(dealPrice) : null;
+      const parsedWindow = verificationWindow.trim() ? Number(verificationWindow) : null;
+      const publishAtIso = localInputToIso(publishAt);
+      if (publishAt.trim() && !publishAtIso) {
+        showToast("Некорректная дата публикации", { type: "error" });
+        return;
+      }
+      if ((dealPrice.trim() && Number.isNaN(parsedPrice)) || (verificationWindow.trim() && Number.isNaN(parsedWindow))) {
+        showToast("Цена и окно верификации должны быть числом", { type: "error" });
+        return;
+      }
       const deal = await apiFetch<{ id: number }>("/deals", {
         method: "POST",
-        body: JSON.stringify({ request_id: request.id, channel_id: selectedChannel.id }),
+        body: JSON.stringify({
+          request_id: request.id,
+          channel_id: selectedChannel.id,
+          price: parsedPrice,
+          format: dealFormat.trim() || "post",
+          brief: brief.trim() || request.brief || null,
+          publish_at: publishAtIso,
+          verification_window: parsedWindow,
+        }),
       });
       showToast("Сделка создана", { type: "success" });
       navigate(`/deals/${deal.id}`);
@@ -198,6 +224,39 @@ export function RequestDetailPage() {
           </div>
         </Group>
       )}
+
+      <Group header="Параметры отклика">
+        <div className="flex flex-col gap-3 px-4 py-3">
+          <Input
+            placeholder="Ваша цена (опционально)"
+            type="text"
+            value={dealPrice}
+            onChange={(v) => setDealPrice(v)}
+            numeric
+          />
+          <Input
+            placeholder="Формат"
+            type="text"
+            value={dealFormat}
+            onChange={(v) => setDealFormat(v)}
+          />
+          <DateTimePickerField value={publishAt} onChange={setPublishAt} />
+          <Input
+            placeholder="verification_window (мин)"
+            type="text"
+            value={verificationWindow}
+            onChange={(v) => setVerificationWindow(v)}
+            numeric
+          />
+          <textarea
+            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            rows={4}
+            placeholder="Комментарий/условия к сделке"
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+          />
+        </div>
+      </Group>
 
       <div className="flex flex-col gap-2 pt-2">
         <Button text="Откликнуться" type="primary" onClick={respond} />

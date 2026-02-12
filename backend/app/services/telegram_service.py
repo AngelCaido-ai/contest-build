@@ -100,6 +100,69 @@ def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[st
     return first.get("message_id")
 
 
+def _detect_upload_media_type(filename: str | None, content_type: str | None) -> str:
+    ctype = (content_type or "").lower()
+    name = (filename or "").lower()
+    if ctype.startswith("video/"):
+        return "video"
+    if ctype == "image/gif" or name.endswith(".gif"):
+        return "animation"
+    if ctype.startswith("image/"):
+        return "photo"
+    return "document"
+
+
+def upload_media_for_user(chat_id: int, filename: str, content: bytes, content_type: str | None = None) -> dict | None:
+    if not settings.bot_token:
+        logger.warning("upload_media_for_user: bot_token not configured")
+        return None
+    media_type = _detect_upload_media_type(filename, content_type)
+    method_map = {
+        "photo": ("sendPhoto", "photo"),
+        "video": ("sendVideo", "video"),
+        "animation": ("sendAnimation", "animation"),
+        "document": ("sendDocument", "document"),
+    }
+    method, file_field = method_map.get(media_type, ("sendDocument", "document"))
+    url = f"https://api.telegram.org/bot{settings.bot_token}/{method}"
+    try:
+        resp = requests.post(
+            url,
+            data={"chat_id": chat_id},
+            files={file_field: (filename, content, content_type or "application/octet-stream")},
+        )
+        if not resp.ok:
+            logger.warning("upload_media_for_user: http %s body=%s", resp.status_code, resp.text[:200])
+            return None
+        data = resp.json()
+        if not data.get("ok"):
+            logger.warning("upload_media_for_user: api error %s", data.get("description"))
+            return None
+        result = data.get("result") or {}
+        file_id = None
+        if media_type == "photo":
+            photos = result.get("photo") or []
+            if photos:
+                file_id = photos[-1].get("file_id")
+        elif media_type == "video":
+            file_id = (result.get("video") or {}).get("file_id")
+        elif media_type == "animation":
+            file_id = (result.get("animation") or {}).get("file_id")
+        else:
+            file_id = (result.get("document") or {}).get("file_id")
+        if not file_id:
+            logger.warning("upload_media_for_user: file_id missing")
+            return None
+        return {
+            "type": media_type,
+            "file_id": file_id,
+            "message_id": result.get("message_id"),
+        }
+    except Exception:
+        logger.exception("upload_media_for_user: request error")
+        return None
+
+
 def get_chat_administrators(chat_id: int) -> list[dict] | None:
     if not settings.bot_token:
         logger.warning("get_chat_administrators: bot_token not configured")

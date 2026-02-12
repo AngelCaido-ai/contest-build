@@ -66,3 +66,10 @@ class BotAdvertiserBrief(BaseModel):
     text: str | None = None
     publish_at: datetime | None = None
     media_file_ids: list[dict] | None = None
+
+
+class BotDealMessageCreate(BaseModel):
+    actor_tg_user_id: int
+    text: str | None = None
+    media_file_ids: list[dict] | None = None
+    reply_to_event_id: int | None = None

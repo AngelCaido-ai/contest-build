@@ -36,6 +36,7 @@ export function ListingsPage() {
       <Text type="title2" weight="bold">
         Каталог размещений
       </Text>
+      <Button text="Создать листинг" type="primary" onClick={() => navigate("/listings/new")} />
 
       <Group header="Фильтры">
         <div className="flex gap-2 px-4 py-2">

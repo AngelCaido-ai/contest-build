@@ -1,17 +1,19 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
   Group,
   GroupItem,
+  Input,
   Spinner,
   Text,
   useToast,
 } from "@telegram-tools/ui-kit";
-import { apiFetch } from "../api/client";
+import { apiFetch, uploadMedia } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
-import type { ListingDetail } from "../types";
+import type { ListingDetail, MediaFileId } from "../types";
+import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
 
 function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -32,6 +34,14 @@ export function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const [dealPrice, setDealPrice] = useState("");
+  const [dealFormat, setDealFormat] = useState("post");
+  const [publishAt, setPublishAt] = useState("");
+  const [verificationWindow, setVerificationWindow] = useState("");
+  const [brief, setBrief] = useState("");
+  const [creativeExample, setCreativeExample] = useState("");
+  const [creativeMedia, setCreativeMedia] = useState<MediaFileId[]>([]);
+  const [mediaUploading, setMediaUploading] = useState(false);
 
   const listingId = Number(id);
   const fetcher = useCallback(() => apiFetch<ListingDetail>(`/listings/${listingId}`), [listingId]);
@@ -43,14 +53,61 @@ export function ListingDetailPage() {
   const respond = async () => {
     if (!listing) return;
     try {
+      const parsedPrice = dealPrice.trim() ? Number(dealPrice) : null;
+      const parsedWindow = verificationWindow.trim() ? Number(verificationWindow) : null;
+      const publishAtIso = localInputToIso(publishAt);
+      if (publishAt.trim() && !publishAtIso) {
+        showToast("Некорректная дата публикации", { type: "error" });
+        return;
+      }
+      if ((dealPrice.trim() && Number.isNaN(parsedPrice)) || (verificationWindow.trim() && Number.isNaN(parsedWindow))) {
+        showToast("Цена и окно верификации должны быть числом", { type: "error" });
+        return;
+      }
       const deal = await apiFetch<{ id: number }>("/deals", {
         method: "POST",
-        body: JSON.stringify({ listing_id: listing.id, channel_id: listing.channel_id }),
+        body: JSON.stringify({
+          listing_id: listing.id,
+          channel_id: listing.channel_id,
+          price: parsedPrice,
+          format: dealFormat.trim() || listing.format,
+          brief: brief.trim() || null,
+          publish_at: publishAtIso,
+          verification_window: parsedWindow,
+        }),
       });
+      const payloadTextParts = [];
+      if (brief.trim()) payloadTextParts.push(`brief: ${brief.trim()}`);
+      if (creativeExample.trim()) payloadTextParts.push(`creative_example: ${creativeExample.trim()}`);
+      const media = creativeMedia.length > 0 ? creativeMedia : null;
+      if (payloadTextParts.length > 0 || publishAtIso || media) {
+        await apiFetch(`/deals/${deal.id}/advertiser_brief`, {
+          method: "POST",
+          body: JSON.stringify({
+            text: payloadTextParts.join("\n"),
+            publish_at: publishAtIso,
+            media_file_ids: media,
+          }),
+        });
+      }
       showToast("Сделка создана", { type: "success" });
       navigate(`/deals/${deal.id}`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+    }
+  };
+
+  const handleCreativeMediaFile = async (file: File | null) => {
+    if (!file) return;
+    setMediaUploading(true);
+    try {
+      const uploaded = await uploadMedia(file);
+      setCreativeMedia((prev) => [...prev, { type: uploaded.type, file_id: uploaded.file_id }]);
+      showToast("Файл загружен", { type: "success" });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Ошибка загрузки", { type: "error" });
+    } finally {
+      setMediaUploading(false);
     }
   };
 
@@ -133,6 +190,61 @@ export function ListingDetailPage() {
           <Text type="body" color="secondary">
             {formatMaybeJson(listing.constraints)}
           </Text>
+        </div>
+      </Group>
+
+      <Group header="Отклик">
+        <div className="flex flex-col gap-3 px-4 py-3">
+          <Input
+            placeholder="Ваша цена (опционально)"
+            type="text"
+            value={dealPrice}
+            onChange={(v) => setDealPrice(v)}
+            numeric
+          />
+          <Input
+            placeholder="Формат"
+            type="text"
+            value={dealFormat}
+            onChange={(v) => setDealFormat(v)}
+          />
+          <DateTimePickerField value={publishAt} onChange={setPublishAt} />
+          <Input
+            placeholder="verification_window (мин)"
+            type="text"
+            value={verificationWindow}
+            onChange={(v) => setVerificationWindow(v)}
+            numeric
+          />
+          <textarea
+            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            rows={4}
+            placeholder={"Бриф\nПример:\n- продукт\n- CTA\n- ограничения"}
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+          />
+          <textarea
+            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            rows={3}
+            placeholder="Пример креатива текстом"
+            value={creativeExample}
+            onChange={(e) => setCreativeExample(e.target.value)}
+          />
+          <input
+            type="file"
+            accept="image/*,video/*,.gif,.pdf,.doc,.docx,.txt"
+            onChange={(e) => handleCreativeMediaFile(e.target.files?.[0] ?? null)}
+          />
+          {creativeMedia.length > 0 && (
+            <Text type="caption1" color="secondary">
+              Файлы: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
+            </Text>
+          )}
+          {mediaUploading && (
+            <Text type="caption1" color="secondary">
+              Загружаем файл...
+            </Text>
+          )}
         </div>
       </Group>
 

@@ -1,6 +1,9 @@
 # Дневник изменений
 
 ## docs
+- 2026-02-09: Обновлены `docs/backend.md` и `docs/bot.md` — добавлены endpoint’ы и UI-флоу переписки по сделке (messages/history/reply).
+- 2026-02-09: Обновлён `docs/backend.md` — добавлен JWT endpoint `/deals/media/upload` для загрузки медиа в Telegram и получения `file_id`.
+- 2026-02-09: Обновлён `docs/backend.md` — добавлены JWT endpoint’ы workflow сделки и endpoint’ы профиля/кошелька для Mini App.
 - 2026-02-11: Обновлён `docs/backend.md` — добавлено описание sweep остатков escrow (поля, миграция, конфиг, фоновая задача).
 - 2026-02-11: Создан `docs/deploy.md` — инструкция по деплою на сервер (архитектура, сервисы, варианты деплоя, откат, проверка).
 - 2026-02-11: Обновлён `docs/backend.md` — `GET /listings/{id}` описан как endpoint для предпросмотра листинга с preview канала и статистикой (если есть).
@@ -10,6 +13,10 @@
 - 2026-02-09: Обновлён `docs/bot.md` — добавлены новые шаги отклика на листинг и эндпоинт брифа рекламодателя.
 
 ## backend
+- 2026-02-09: В bot API добавлены endpoint’ы `/bot/deals/{id}/messages` (POST/GET) для переписки по сделке; сообщения сохраняются как `DealEvent(type="MESSAGE")`, реализовано уведомление второй стороне с быстрыми кнопками Reply/History.
+- 2026-02-09: Добавлен JWT endpoint `/deals/media/upload` (UploadFile): файл загружается в Telegram от имени пользователя, endpoint возвращает `type` и `file_id` для `media_file_ids`.
+- 2026-02-09: В JWT API добавлены endpoint’ы управления сделкой: `/deals/{id}/terms`, `/publish_at`, `/status`, `/creative`, `/creative/status`, `/creative` (GET), `/advertiser_brief`.
+- 2026-02-09: В auth API добавлены `GET /auth/me` и `POST /auth/me/wallet` для работы Mini App с профилем и payout-кошельком.
 - 2026-02-11: В `stats_service.py` добавлен фоллбэк расчёт `views_per_post` из последних 20 постов канала (`_avg_views_from_posts`), если `GetBroadcastStatsRequest` возвращает 0 (Telegram отдаёт среднее за период, без новых постов = 0). Значения `subscribers`/`views_per_post` приводятся к `int` перед записью в БД.
 - 2026-02-11: Добавлено логирование в `stats_service.py` и `stats.py` — сырой ответ MTProto, причина fallback на Bot API, расчёт views из постов.
 - 2026-02-11: Добавлен sweep остатков escrow: модель `EscrowPayment` расширена полями `sweep_tx_hash`, `swept_at`, добавлена миграция `0006_sweep_fields`, фоновая задача `sweep_completed_deposits`, TON-отправка `send_sweep` с `send_mode=128` и настройки `SWEEP_DELAY_MINUTES`, `SWEEP_MIN_BALANCE_TON`.
@@ -74,6 +81,7 @@
 - 2026-01-27: Интеграционный тест проверяет seqno и исходящую транзакцию.
 
 ## bot
+- 2026-02-09: В карточке сделки добавлены кнопки «Написать сообщение» и «История переписки», реализован `DealMessageState.content` для отправки текста/медиа и просмотр истории с пагинацией.
 - 2026-02-09: /test_deal апсертит пользователя перед созданием тестовой сделки, чтобы избежать 404 при отсутствии записи.
 - 2026-02-09: Отклик на листинг расширен шагами publish_at и загрузкой примера креатива/медиа для брифа рекламодателя.
 - 2026-02-06: Удалены channel_posts хендлеры и UpdateLogMiddleware из основного бота — tamper detection перенесён в watcher.
@@ -127,6 +135,13 @@
 - 2026-01-27: В создании listing добавлен выбор каналов пользователя с опцией ручного ввода.
 
 ## miniapp
+- 2026-02-09: В `DealDetailPage` переименован блок `Мастер сделки` в `Пошаговый сценарий` для более нейтрального UX-текста.
+- 2026-02-09: Добавлена загрузка медиа файла в key flow сделок и отклика на листинг через backend `/deals/media/upload`, вместо ручного JSON `media_file_ids`.
+- 2026-02-09: Добавлен компонент `DateTimePickerField` (datetime-local + пресеты: через 1/3/6 часов, завтра 12:00/18:00); заменён ручной ISO-ввод в `DealDetailPage`, `ListingDetailPage`, `RequestDetailPage`.
+- 2026-02-09: В `DealDetailPage` добавлен мастер-поток с прогрессом шагов, кнопками Назад/Далее и режимом «показать все шаги».
+- 2026-02-09: Добавлены страницы `AddChannelPage`, `CreateListingPage`, `CreateRequestPage`, `WalletPage`; подключены новые роуты и CTA-кнопки в разделах каналов/листингов/заявок.
+- 2026-02-09: `DealDetailPage` расширен action-блоками по ролям: terms, status, publish_at, creative, creative review, advertiser brief и просмотр последнего креатива.
+- 2026-02-09: `ListingDetailPage` и `RequestDetailPage` расширены полями отклика (цена, формат, publish_at, verification_window, бриф) перед созданием сделки.
 - 2026-02-11: `ChannelsPage` — после обновления статистики канала (`refreshStats`) список каналов автоматически перезагружается через `refetch()`.
 - 2026-02-11: Секция управления менеджерами в `ChannelsPage` скрыта для не-владельцев канала; менеджеры видят свои каналы, но не могут редактировать список менеджеров.
 - 2026-02-11: Каталог листингов запрашивает `GET /listings` с `exclude_own=true`, чтобы на странице не показывались собственные листинги.

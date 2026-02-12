@@ -137,6 +137,11 @@ export type DealEvent = {
   created_at: string;
 };
 
+export type MediaFileId = {
+  type: "photo" | "video" | "animation" | "document";
+  file_id: string;
+};
+
 export type EscrowPayment = {
   id: number;
   deal_id: number;

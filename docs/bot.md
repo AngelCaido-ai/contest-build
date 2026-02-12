@@ -181,6 +181,7 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 | `DealPublishAtState` | `publish_at`                                 | Установка времени публикации      |
 | `CreativeState`      | `content`                                    | Отправка креатива (текст/медиа)   |
 | `CreativeStatusState`| `status`, `comment`, `publish_at`            | Ревью креатива рекламодателем     |
+| `DealMessageState`   | `content`                                    | Отправка сообщения по сделке      |
 | `DealSwitchState`    | `confirm`                                    | Переключение между сделками       |
 
 #### Callback-префиксы
@@ -193,6 +194,7 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 - `deal_creative_status:`, `deal_creative_status_set:`, `deal_creative_status_back:`, `deal_creative_status_cancel:` — ревью креатива
 - `deal_creative_view:`, `deal_creative_previous:` — просмотр креативов (текущий и предыдущие версии)
 - `deal_publish_at:`, `deal_publish_at_back:`, `deal_publish_at_cancel:` — установка времени публикации
+- `deal_msg:`, `deal_msg_back:`, `deal_msg_cancel:`, `deal_msg_history:` — переписка по сделке
 - `deal_switch:` — переключение между сделками с сохранением/сбросом черновика
 - `deal_draft_resume:`, `deal_draft_clear:` — возобновление/удаление черновика
 
@@ -233,6 +235,14 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 - Поддержка медиагрупп (до нескольких файлов).
 - Просмотр предыдущих версий креатива.
 
+#### Переписка по сделке
+
+- Обе стороны могут отправить сообщение из карточки сделки кнопкой «Написать сообщение».
+- Поддерживаются текст и медиа (фото, видео, анимация, документ).
+- Сообщение сохраняется как `DealEvent(type="MESSAGE")`.
+- Вторая сторона получает уведомление с быстрыми кнопками: Open deal / Reply / History.
+- Кнопка «История переписки» показывает последние сообщения и пагинацию «Еще».
+
 ---
 
 ## API-клиент (`api_client.py`)
@@ -260,6 +270,8 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 | `get_deal`               | GET            | `/bot/deals/{id}`                     | Детали сделки                    |
 | `create_deal`            | POST           | `/bot/deals`                          | Создать сделку                   |
 | `create_advertiser_brief`| POST           | `/bot/deals/{id}/advertiser_brief`    | Бриф рекламодателя с медиа       |
+| `create_deal_message`    | POST           | `/bot/deals/{id}/messages`            | Отправить сообщение по сделке    |
+| `list_deal_messages`     | GET            | `/bot/deals/{id}/messages`            | История сообщений по сделке      |
 | `update_terms`           | POST           | `/bot/deals/{id}/terms`               | Обновить условия сделки          |
 | `update_publish_at`      | POST           | `/bot/deals/{id}/publish_at`          | Обновить время публикации        |
 | `update_status`          | POST           | `/bot/deals/{id}/status`              | Сменить статус сделки            |
