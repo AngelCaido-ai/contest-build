@@ -17,6 +17,7 @@ from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from tonsdk.utils import Address, bytes_to_b64str, to_nano
 
 from app.core.config import settings
+from app.utils.ton_address import validate_ton_address
 
 logger = logging.getLogger(__name__)
 
@@ -197,10 +198,7 @@ def build_deposit_comment(deal_id: int) -> str:
 def _normalize_address(value: str | None) -> str:
     if not value:
         return ""
-    try:
-        return Address(value).to_string(False)
-    except Exception:
-        return value.strip().lower()
+    return validate_ton_address(value)
 
 
 def _extract_comment(in_msg: dict) -> str | None:

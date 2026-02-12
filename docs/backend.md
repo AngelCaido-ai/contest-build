@@ -155,6 +155,13 @@ backend/
 - `POST /bot/deals/{id}/deposit` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
 - При превышении лимита API возвращает `429 Too Many Requests`
 
+### Валидация TON-адресов
+
+- `POST /escrow/deals/{id}/release` — поле `payout_address` валидируется как TON-адрес на уровне Pydantic.
+- `POST /escrow/deals/{id}/refund` — поле `refund_address` валидируется как TON-адрес на уровне Pydantic.
+- `POST /auth/me/wallet` и `POST /bot/users/{tg_user_id}/wallet` — поле `linked_wallet` валидируется как TON-адрес.
+- При невалидном формате API возвращает `422 Unprocessable Entity`, транзакция не отправляется.
+
 ---
 
 ## Модели данных
@@ -336,7 +343,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/auth/miniapp` | Авторизация через Telegram Web App `init_data` |
 | `POST` | `/auth/bot` | Авторизация от бота (`X-Bot-Secret`) |
 | `GET` | `/auth/me` | Текущий пользователь по JWT |
-| `POST` | `/auth/me/wallet` | Обновить payout-кошелёк текущего пользователя |
+| `POST` | `/auth/me/wallet` | Обновить payout-кошелёк текущего пользователя (TON-адрес валидируется) |
 
 ### Channels (`/channels`)
 
@@ -402,8 +409,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 |---|---|---|---|
 | `POST` | `/escrow/deals/{id}/deposit` | Создать депозитный адрес | JWT (участник) |
 | `POST` | `/escrow/deals/{id}/confirm` | Подтвердить оплату | `X-Bot-Secret` |
-| `POST` | `/escrow/deals/{id}/release` | Выплата владельцу | `X-Bot-Secret` |
-| `POST` | `/escrow/deals/{id}/refund` | Возврат рекламодателю | `X-Bot-Secret` |
+| `POST` | `/escrow/deals/{id}/release` | Выплата владельцу (валидирует `payout_address`) | `X-Bot-Secret` |
+| `POST` | `/escrow/deals/{id}/refund` | Возврат рекламодателю (валидирует `refund_address`) | `X-Bot-Secret` |
 
 ### Stats (`/stats`)
 
@@ -418,7 +425,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание |
 |---|---|---|
 | `POST` | `/bot/users/upsert` | Создать/обновить пользователя |
-| `POST` | `/bot/users/{tg_user_id}/wallet` | Привязать кошелёк |
+| `POST` | `/bot/users/{tg_user_id}/wallet` | Привязать кошелёк (TON-адрес валидируется) |
 | `POST` | `/bot/channels` | Создать/обновить канал |
 | `GET` | `/bot/channels` | Список каналов пользователя (по `tg_user_id`) |
 | `POST` | `/bot/listings` | Создать листинг (требуется `linked_wallet`, иначе 400) |

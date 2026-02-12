@@ -2,6 +2,12 @@
 
 Формат записи: дата — изменение — причина/контекст.
 
+## 2026-02-12
+- Добавлена строгая валидация TON-адресов в `EscrowReleaseRequest.payout_address`, `EscrowRefundRequest.refund_address` и `UserWalletUpdate.linked_wallet`; невалидные значения теперь отклоняются на уровне Pydantic с `422` — причина: исключить сценарий, когда произвольная строка доходит до release/refund и приводит к риску потери средств.
+- Вынесен общий валидатор `validate_ton_address` в `backend/app/utils/ton_address.py`, а `_normalize_address` в `ton_escrow.py` переведён на него без silent-fallback — причина: централизовать проверку адресов и убрать молчаливое принятие невалидных значений.
+- Обновлены тесты `backend/tests/test_refund_api.py`: happy-path использует валидный TON-адрес, добавлены кейсы на `422` для невалидных `payout_address`/`refund_address` — причина: зафиксировать fail-fast поведение API.
+- Обновлён `docs/backend.md` с явным описанием валидации TON-адресов в escrow и wallet endpoint’ах — причина: синхронизировать документацию с текущим контрактом API.
+
 ## 2026-02-11
 - Добавлен фоллбэк для `views_per_post`: если `GetBroadcastStatsRequest` вернул 0 (нет постов за стат-период), считаем среднее из последних 20 постов канала — причина: Telegram отдаёт среднее за 7 дней, каналы без новых постов получали 0.
 - Добавлено логирование в `stats_service` (MTProto + Bot API fallback) и эндпоинт `refresh_stats` — причина: ошибки Telethon поглощались молча, невозможно было понять почему `views_per_post` = null.

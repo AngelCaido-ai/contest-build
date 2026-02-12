@@ -1,9 +1,13 @@
 import base64
+import sys
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import app.models
 from app.core.config import settings

@@ -5,6 +5,9 @@ from unittest.mock import patch
 from app.core.config import settings
 from app.services import ton_escrow
 
+VALID_DEPOSIT_ADDRESS = "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"
+VALID_OTHER_ADDRESS = "EQBaRCgY6gPscgWe7FWf3lD905cO74ExP95zfWgi5zpeeB1R"
+
 
 class TonEscrowTests(unittest.TestCase):
     def setUp(self):
@@ -59,9 +62,9 @@ class TonEscrowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ton_escrow.ensure_escrow_secret_key()
 
-    @patch("app.services.ton_escrow._toncenter_get")
+    @patch("app.services.ton_escrow._toncenter_transactions")
     def test_find_incoming_tx_strict(self, mock_get):
-        deposit_address = "EQD123"
+        deposit_address = VALID_DEPOSIT_ADDRESS
         comment = "deal:10"
         tx = {
             "in_msg": {"value": "1000", "destination": deposit_address, "message": comment},
@@ -73,20 +76,20 @@ class TonEscrowTests(unittest.TestCase):
         tx_id_bad_comment = ton_escrow.find_incoming_tx(deposit_address, 0.000001, "deal:11")
         self.assertIsNone(tx_id_bad_comment)
 
-    @patch("app.services.ton_escrow._toncenter_get")
+    @patch("app.services.ton_escrow._toncenter_transactions")
     def test_find_incoming_tx_address_mismatch(self, mock_get):
-        deposit_address = "EQD123"
+        deposit_address = VALID_DEPOSIT_ADDRESS
         tx = {
-            "in_msg": {"value": "1000", "destination": "EQX999", "message": "deal:10"},
+            "in_msg": {"value": "1000", "destination": VALID_OTHER_ADDRESS, "message": "deal:10"},
             "transaction_id": {"hash": "abc", "lt": "123"},
         }
         mock_get.return_value = [tx]
         tx_id = ton_escrow.find_incoming_tx(deposit_address, 0.000001, "deal:10")
         self.assertIsNone(tx_id)
 
-    @patch("app.services.ton_escrow._toncenter_get")
+    @patch("app.services.ton_escrow._toncenter_transactions")
     def test_find_incoming_tx_amount_too_small(self, mock_get):
-        deposit_address = "EQD123"
+        deposit_address = VALID_DEPOSIT_ADDRESS
         tx = {
             "in_msg": {"value": "1", "destination": deposit_address, "message": "deal:10"},
             "transaction_id": {"hash": "abc", "lt": "123"},
@@ -95,9 +98,9 @@ class TonEscrowTests(unittest.TestCase):
         tx_id = ton_escrow.find_incoming_tx(deposit_address, 1.0, "deal:10")
         self.assertIsNone(tx_id)
 
-    @patch("app.services.ton_escrow._toncenter_get")
+    @patch("app.services.ton_escrow._toncenter_transactions")
     def test_find_incoming_tx_no_comment_required(self, mock_get):
-        deposit_address = "EQD123"
+        deposit_address = VALID_DEPOSIT_ADDRESS
         tx = {
             "in_msg": {"value": "1000", "destination": deposit_address},
             "transaction_id": {"hash": "abc", "lt": "123"},
