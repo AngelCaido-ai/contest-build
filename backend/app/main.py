@@ -28,15 +28,14 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     logger.exception("unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-_default_origins = ["http://localhost:5173", "http://localhost:3000"]
-_extra_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+_allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_default_origins + _extra_origins,
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Bot-Secret"],
 )
 app.add_middleware(SlowAPIMiddleware)
 

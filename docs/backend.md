@@ -162,6 +162,17 @@ backend/
 - `POST /auth/me/wallet` и `POST /bot/users/{tg_user_id}/wallet` — поле `linked_wallet` валидируется как TON-адрес.
 - При невалидном формате API возвращает `422 Unprocessable Entity`, транзакция не отправляется.
 
+### CORS
+
+Middleware `CORSMiddleware` настроен с явными ограничениями:
+
+| Параметр | Значение |
+|---|---|
+| `allow_origins` | Только из `CORS_ORIGINS` env (через запятую). Localhost **не** добавляется автоматически — для dev нужно указывать в `.env` |
+| `allow_credentials` | `True` |
+| `allow_methods` | `GET`, `POST`, `PATCH`, `DELETE`, `OPTIONS` |
+| `allow_headers` | `Authorization`, `Content-Type`, `X-Bot-Secret` |
+
 ---
 
 ## Модели данных

@@ -1,6 +1,7 @@
 # Дневник изменений
 
 ## docs
+- 2026-02-12: Обновлён `docs/backend.md` — добавлена секция CORS с описанием ограниченных origins/methods/headers.
 - 2026-02-12: Обновлён `docs/backend.md` — добавлена секция валидации TON-адресов и уточнения по endpoint’ам `release/refund` и wallet-update (`/auth/me/wallet`, `/bot/users/{tg_user_id}/wallet`).
 - 2026-02-09: Обновлены `docs/backend.md` и `docs/bot.md` — добавлены endpoint’ы и UI-флоу переписки по сделке (messages/history/reply).
 - 2026-02-09: Обновлён `docs/backend.md` — добавлен JWT endpoint `/deals/media/upload` для загрузки медиа в Telegram и получения `file_id`.
@@ -16,6 +17,7 @@
 - 2026-02-09: Обновлён `docs/bot.md` — добавлены новые шаги отклика на листинг и эндпоинт брифа рекламодателя.
 
 ## backend
+- 2026-02-12: Ужесточена CORS-конфигурация: убраны захардкоженные localhost-origins, `allow_methods` ограничен до `GET/POST/PATCH/DELETE/OPTIONS`, `allow_headers` ограничен до `Authorization/Content-Type/X-Bot-Secret`. Origins берутся только из `CORS_ORIGINS` env.
 - 2026-02-12: Добавлена строгая валидация TON-адресов в `EscrowReleaseRequest.payout_address`, `EscrowRefundRequest.refund_address` и `UserWalletUpdate.linked_wallet`; невалидные адреса отклоняются с `422` до попытки отправки транзакции. `_normalize_address` переведён на общий валидатор без silent-fallback. Добавлены API-тесты на невалидные адреса для `release/refund`.
 - 2026-02-09: В bot API добавлены endpoint’ы `/bot/deals/{id}/messages` (POST/GET) для переписки по сделке; сообщения сохраняются как `DealEvent(type="MESSAGE")`, реализовано уведомление второй стороне с быстрыми кнопками Reply/History.
 - 2026-02-09: Добавлен JWT endpoint `/deals/media/upload` (UploadFile): файл загружается в Telegram от имени пользователя, endpoint возвращает `type` и `file_id` для `media_file_ids`.
