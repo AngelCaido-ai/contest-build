@@ -1368,9 +1368,23 @@ async def listing_respond_start(callback: CallbackQuery, state: FSMContext) -> N
         await callback.message.answer("You cannot respond to your own listing.", reply_markup=_main_menu_keyboard())
         await callback.answer()
         return
-    await state.set_state(ListingRespondState.price_usd)
-    await state.update_data(listing_id=listing_id)
-    await _prompt_listing_respond_price(callback.message)
+    init_data: dict = {"listing_id": listing_id}
+    listing_price = listing.get("price_usd")
+    listing_format = listing.get("format")
+    if listing_price is not None:
+        init_data["price_usd"] = float(listing_price)
+    if listing_format:
+        init_data["format"] = listing_format
+    await state.update_data(**init_data)
+    if listing_price is None:
+        await state.set_state(ListingRespondState.price_usd)
+        await _prompt_listing_respond_price(callback.message)
+    elif not listing_format:
+        await state.set_state(ListingRespondState.format)
+        await _prompt_listing_respond_format(callback.message)
+    else:
+        await state.set_state(ListingRespondState.brief)
+        await _prompt_listing_respond_brief(callback.message)
     await callback.answer()
 
 
@@ -1532,8 +1546,13 @@ async def listing_respond_price(message: Message, state: FSMContext) -> None:
     else:
         await message.answer("Price must be a number or 'skip'.")
         return
-    await state.set_state(ListingRespondState.format)
-    await _prompt_listing_respond_format(message)
+    data = await state.get_data()
+    if data.get("format"):
+        await state.set_state(ListingRespondState.brief)
+        await _prompt_listing_respond_brief(message)
+    else:
+        await state.set_state(ListingRespondState.format)
+        await _prompt_listing_respond_format(message)
 
 
 @router.message(ListingRespondState.format)

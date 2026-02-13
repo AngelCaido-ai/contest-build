@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
@@ -50,6 +50,12 @@ export function ListingDetailPage() {
   const channel = listing?.channel ?? null;
   const stats = channel?.stats ?? null;
 
+  useEffect(() => {
+    if (!listing) return;
+    if (listing.price_usd != null) setDealPrice(String(listing.price_usd));
+    if (listing.format) setDealFormat(listing.format);
+  }, [listing]);
+
   const respond = async () => {
     if (!listing) return;
     try {
@@ -69,7 +75,7 @@ export function ListingDetailPage() {
         body: JSON.stringify({
           listing_id: listing.id,
           channel_id: listing.channel_id,
-          price: parsedPrice,
+          price: parsedPrice ?? listing.price_usd ?? null,
           format: dealFormat.trim() || listing.format,
           brief: brief.trim() || null,
           publish_at: publishAtIso,

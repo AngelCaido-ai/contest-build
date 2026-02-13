@@ -17,6 +17,13 @@ export function getAuthToken() {
   return authToken;
 }
 
+export class NetworkError extends Error {
+  constructor(message = "Нет подключения к интернету") {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -28,7 +35,14 @@ export async function apiFetch<T = unknown>(
   if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch {
+    throw new NetworkError();
+  }
+
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const detail =

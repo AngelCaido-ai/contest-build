@@ -5,6 +5,10 @@ import "@telegram-tools/ui-kit/dist/index.css";
 
 import App from "./App";
 import "./index.css";
+import {
+  ErrorBoundary,
+  GlobalErrorFallback,
+} from "./components/ErrorBoundary";
 
 const manifestUrl = new URL(
   "tonconnect-manifest.json",
@@ -14,12 +18,14 @@ const manifestUrl = new URL(
 const root = document.getElementById("root");
 if (root) {
   ReactDOM.createRoot(root).render(
-    <ThemeProvider>
-      <TonConnectUIProvider manifestUrl={manifestUrl}>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </TonConnectUIProvider>
-    </ThemeProvider>,
+    <ErrorBoundary fallback={<GlobalErrorFallback />}>
+      <ThemeProvider>
+        <TonConnectUIProvider manifestUrl={manifestUrl}>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </TonConnectUIProvider>
+      </ThemeProvider>
+    </ErrorBoundary>,
   );
 }

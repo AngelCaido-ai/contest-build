@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
@@ -73,6 +73,11 @@ export function RequestDetailPage() {
     );
   }, [channels]);
 
+  useEffect(() => {
+    if (!request) return;
+    if (request.budget != null) setDealPrice(String(request.budget));
+  }, [request]);
+
   const refreshStats = async () => {
     if (!selectedChannel) return;
     try {
@@ -106,7 +111,7 @@ export function RequestDetailPage() {
         body: JSON.stringify({
           request_id: request.id,
           channel_id: selectedChannel.id,
-          price: parsedPrice,
+          price: parsedPrice ?? request.budget ?? null,
           format: dealFormat.trim() || "post",
           brief: brief.trim() || request.brief || null,
           publish_at: publishAtIso,
