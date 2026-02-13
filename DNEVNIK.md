@@ -4,7 +4,11 @@
 - 2026-02-13: Обработка оффлайна. `NetworkError` в `api/client.ts` — `apiFetch` перехватывает `TypeError` от `fetch` при обрыве сети и бросает типизированную ошибку. Хук `useOnlineStatus` (`hooks/useOnlineStatus.ts`) — подписка на `navigator.onLine` через `useSyncExternalStore`. Компонент `OfflineBanner` (`components/OfflineBanner.tsx`) — sticky-баннер вверху экрана: красный при оффлайне, зелёный «Соединение восстановлено» на 3 с после возврата сети. В `useApi` добавлено поле `isOffline` и авто-повтор запроса при событии `online`, если предыдущий запрос упал с `NetworkError`. В `Layout.tsx` встроен `OfflineBanner`, контент сдвигается вниз при показе баннера.
 - 2026-02-13: Добавлен компонент `ErrorBoundary` (`src/components/ErrorBoundary.tsx`). Глобальная обёртка в `main.tsx` ловит критические ошибки провайдеров (показывает кнопку «Перезагрузить»). Маршрутная обёртка в `Layout.tsx` ловит ошибки отдельных страниц, сохраняя нижнюю навигацию (кнопка «Попробовать снова» сбрасывает ошибку и ведёт на `/listings`).
 
+## backend
+- 2026-02-13: Удалены escrow-эндпоинты `POST /escrow/deals/{id}/confirm`, `release`, `refund` — лишняя поверхность атаки (worker вызывает `escrow_service` напрямую). Удалены схемы `EscrowConfirmRequest`, `EscrowReleaseRequest`, `EscrowRefundRequest`. Тесты `test_refund_api.py` переведены на прямые вызовы сервисных функций; тесты валидации адресов через HTTP удалены.
+
 ## docs
+- 2026-02-13: Обновлён `docs/backend.md` — удалены confirm/release/refund из таблицы escrow-эндпоинтов, rate limiting, валидации TON-адресов.
 - 2026-02-12: Обновлён `docs/backend.md` — добавлена секция CORS с описанием ограниченных origins/methods/headers.
 - 2026-02-12: Обновлён `docs/backend.md` — добавлена секция валидации TON-адресов и уточнения по endpoint’ам `release/refund` и wallet-update (`/auth/me/wallet`, `/bot/users/{tg_user_id}/wallet`).
 - 2026-02-09: Обновлены `docs/backend.md` и `docs/bot.md` — добавлены endpoint’ы и UI-флоу переписки по сделке (messages/history/reply).

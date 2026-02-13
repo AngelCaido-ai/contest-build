@@ -7,7 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api.routes import auth, bot_actions, channels, deals, escrow, listings, requests, stats
+from app.api.routes import auth, bot_actions, channels, deals, escrow, health, listings, requests, stats
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.services import ton_escrow
@@ -39,6 +39,7 @@ app.add_middleware(
 )
 app.add_middleware(SlowAPIMiddleware)
 
+app.include_router(health.router, tags=["health"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(channels.router, prefix="/channels", tags=["channels"])
 app.include_router(listings.router, prefix="/listings", tags=["listings"])

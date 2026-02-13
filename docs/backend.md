@@ -26,9 +26,10 @@ backend/
 │   │   └── routes/
 │   │       ├── auth.py            # Авторизация (miniapp, bot)
 │   │       ├── bot_actions.py     # Действия бота (upsert, deals, creative, tamper, ...)
+│   │       ├── health.py          # Health check (DB + Redis)
 │   │       ├── channels.py        # CRUD каналов и менеджеров
 │   │       ├── deals.py           # CRUD сделок (miniapp)
-│   │       ├── escrow.py          # Escrow: deposit, confirm, release, refund
+│   │       ├── escrow.py          # Escrow: deposit
 │   │       ├── listings.py        # CRUD листингов
 │   │       ├── requests.py        # CRUD заявок
 │   │       └── stats.py           # Статистика каналов
@@ -149,16 +150,11 @@ backend/
 
 - Реализован через `slowapi` с Redis storage (`REDIS_URL`)
 - `POST /escrow/deals/{id}/deposit` — лимит `RATE_LIMIT_ESCROW_DEPOSIT`, ключ: `user_id` из JWT
-- `POST /escrow/deals/{id}/confirm` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
-- `POST /escrow/deals/{id}/release` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
-- `POST /escrow/deals/{id}/refund` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
 - `POST /bot/deals/{id}/deposit` — лимит `RATE_LIMIT_ESCROW_BOT`, ключ: IP
 - При превышении лимита API возвращает `429 Too Many Requests`
 
 ### Валидация TON-адресов
 
-- `POST /escrow/deals/{id}/release` — поле `payout_address` валидируется как TON-адрес на уровне Pydantic.
-- `POST /escrow/deals/{id}/refund` — поле `refund_address` валидируется как TON-адрес на уровне Pydantic.
 - `POST /auth/me/wallet` и `POST /bot/users/{tg_user_id}/wallet` — поле `linked_wallet` валидируется как TON-адрес.
 - При невалидном формате API возвращает `422 Unprocessable Entity`, транзакция не отправляется.
 
@@ -347,6 +343,12 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 ## API-эндпоинты
 
+### Health (`/health`)
+
+| Метод | Путь | Описание | Авторизация |
+|---|---|---|---|
+| `GET` | `/health` | Проверка здоровья сервиса (DB + Redis). 200 — всё ок, 503 — хотя бы один компонент недоступен | — |
+
 ### Auth (`/auth`)
 
 | Метод | Путь | Описание |
@@ -419,9 +421,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/escrow/deals/{id}/deposit` | Создать депозитный адрес | JWT (участник) |
-| `POST` | `/escrow/deals/{id}/confirm` | Подтвердить оплату | `X-Bot-Secret` |
-| `POST` | `/escrow/deals/{id}/release` | Выплата владельцу (валидирует `payout_address`) | `X-Bot-Secret` |
-| `POST` | `/escrow/deals/{id}/refund` | Возврат рекламодателю (валидирует `refund_address`) | `X-Bot-Secret` |
+
+Эндпоинты confirm, release, refund удалены — worker вызывает сервисные функции `escrow_service` напрямую, минуя HTTP.
 
 ### Stats (`/stats`)
 

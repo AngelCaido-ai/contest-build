@@ -18,6 +18,9 @@ from app.api.deps import get_db
 from app.core.config import settings
 from app.db.base import Base
 from app.main import app
+from app.models.deal import Deal
+from app.models.escrow_payment import EscrowPayment
+from app.services.escrow_service import confirm_payment, refund_payment, release_payment
 from app.services import ton_escrow
 
 VALID_TON_ADDRESS = "EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c"
@@ -75,6 +78,15 @@ class RefundApiTests(unittest.TestCase):
         settings.ton_wallet_id = self._prev_wallet_id
         settings.ton_wallet_subwallet = self._prev_wallet_subwallet
         app.state.limiter.enabled = self._prev_limiter_enabled
+
+    def _confirm_via_service(self, deal_id: int, tx_hash: str) -> None:
+        db = self.Session()
+        try:
+            deal = db.get(Deal, deal_id)
+            payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+            confirm_payment(db, deal, payment, tx_hash)
+        finally:
+            db.close()
 
     def _create_funded_deal(self, brief: str = "API validation test") -> tuple[dict[str, str], int]:
         headers_bot = {"X-Bot-Secret": settings.bot_secret}
@@ -137,12 +149,7 @@ class RefundApiTests(unittest.TestCase):
         )
         self.assertEqual(deposit_resp.status_code, 200)
 
-        confirm_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/confirm",
-            json={"tx_hash": "tx_test"},
-            headers=headers_bot,
-        )
-        self.assertEqual(confirm_resp.status_code, 200)
+        self._confirm_via_service(deal_id, "tx_test")
         return headers_bot, deal_id
 
     def test_refund_flow_without_miniapp(self):
@@ -206,29 +213,23 @@ class RefundApiTests(unittest.TestCase):
         )
         self.assertEqual(deposit_resp.status_code, 200)
 
-        confirm_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/confirm",
-            json={"tx_hash": "tx_test"},
-            headers=headers_bot,
-        )
-        self.assertEqual(confirm_resp.status_code, 200)
-        self.assertEqual(confirm_resp.json()["tx_hash"], "tx_test")
+        self._confirm_via_service(deal_id, "tx_test")
 
-        with patch("app.services.ton_escrow.send_refund", return_value="refund_tx") as mock_send:
-            refund_resp = self.client.post(
-                f"/escrow/deals/{deal_id}/refund",
-                json={"refund_address": VALID_TON_ADDRESS, "reason": "api_test"},
-                headers=headers_bot,
-            )
-        self.assertEqual(refund_resp.status_code, 200)
-        refund_payload = refund_resp.json()
-        self.assertEqual(refund_payload["refund_tx_hash"], "refund_tx")
-        self.assertEqual(refund_payload["refund_address"], VALID_TON_ADDRESS)
-        self.assertIsNotNone(refund_payload["refunded_at"])
-        self.assertEqual(mock_send.call_count, 1)
-        _, called_address, called_amount = mock_send.call_args.args
-        self.assertEqual(called_address, VALID_TON_ADDRESS)
-        self.assertAlmostEqual(float(called_amount), 0.05, places=8)
+        db = self.Session()
+        try:
+            deal = db.get(Deal, deal_id)
+            self.assertEqual(deal.status.value, "FUNDED")
+            with patch("app.services.ton_escrow.send_refund", return_value="refund_tx") as mock_send:
+                payment = refund_payment(db, deal, VALID_TON_ADDRESS, "api_test")
+            self.assertEqual(payment.refund_tx_hash, "refund_tx")
+            self.assertEqual(payment.refund_address, VALID_TON_ADDRESS)
+            self.assertIsNotNone(payment.refunded_at)
+            self.assertEqual(mock_send.call_count, 1)
+            _, called_address, called_amount = mock_send.call_args.args
+            self.assertEqual(called_address, VALID_TON_ADDRESS)
+            self.assertAlmostEqual(float(called_amount), 0.05, places=8)
+        finally:
+            db.close()
 
         deal_status_resp = self.client.get(f"/bot/deals/{deal_id}", headers=headers_bot)
         self.assertEqual(deal_status_resp.status_code, 200)
@@ -295,55 +296,27 @@ class RefundApiTests(unittest.TestCase):
         )
         self.assertEqual(deposit_resp.status_code, 200)
 
-        confirm_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/confirm",
-            json={"tx_hash": "tx_test"},
-            headers=headers_bot,
-        )
-        self.assertEqual(confirm_resp.status_code, 200)
-        self.assertEqual(confirm_resp.json()["tx_hash"], "tx_test")
+        self._confirm_via_service(deal_id, "tx_test")
 
-        with patch("app.services.ton_escrow.send_payout", return_value="payout_tx") as mock_send:
-            release_resp = self.client.post(
-                f"/escrow/deals/{deal_id}/release",
-                json={"payout_address": VALID_TON_ADDRESS},
-                headers=headers_bot,
-            )
-        self.assertEqual(release_resp.status_code, 200)
-        release_payload = release_resp.json()
-        self.assertEqual(release_payload["release_tx_hash"], "payout_tx")
-        self.assertEqual(release_payload["payout_address"], VALID_TON_ADDRESS)
-        self.assertIsNotNone(release_payload["released_at"])
-        self.assertEqual(mock_send.call_count, 1)
-        _, called_address, called_amount = mock_send.call_args.args
-        self.assertEqual(called_address, VALID_TON_ADDRESS)
-        self.assertAlmostEqual(float(called_amount), 0.05, places=8)
+        db = self.Session()
+        try:
+            deal = db.get(Deal, deal_id)
+            self.assertEqual(deal.status.value, "FUNDED")
+            with patch("app.services.ton_escrow.send_payout", return_value="payout_tx") as mock_send:
+                payment = release_payment(db, deal, VALID_TON_ADDRESS)
+            self.assertEqual(payment.release_tx_hash, "payout_tx")
+            self.assertEqual(payment.payout_address, VALID_TON_ADDRESS)
+            self.assertIsNotNone(payment.released_at)
+            self.assertEqual(mock_send.call_count, 1)
+            _, called_address, called_amount = mock_send.call_args.args
+            self.assertEqual(called_address, VALID_TON_ADDRESS)
+            self.assertAlmostEqual(float(called_amount), 0.05, places=8)
+        finally:
+            db.close()
 
         deal_status_resp = self.client.get(f"/bot/deals/{deal_id}", headers=headers_bot)
         self.assertEqual(deal_status_resp.status_code, 200)
         self.assertEqual(deal_status_resp.json()["status"], "RELEASED")
-
-    def test_refund_with_invalid_address_returns_422(self):
-        headers_bot, deal_id = self._create_funded_deal("API invalid refund address test")
-        with patch("app.services.ton_escrow.send_refund", return_value="refund_tx") as mock_send:
-            refund_resp = self.client.post(
-                f"/escrow/deals/{deal_id}/refund",
-                json={"refund_address": "invalid_address", "reason": "api_test"},
-                headers=headers_bot,
-            )
-        self.assertEqual(refund_resp.status_code, 422)
-        self.assertEqual(mock_send.call_count, 0)
-
-    def test_release_with_invalid_address_returns_422(self):
-        headers_bot, deal_id = self._create_funded_deal("API invalid payout address test")
-        with patch("app.services.ton_escrow.send_payout", return_value="payout_tx") as mock_send:
-            release_resp = self.client.post(
-                f"/escrow/deals/{deal_id}/release",
-                json={"payout_address": "invalid_address"},
-                headers=headers_bot,
-            )
-        self.assertEqual(release_resp.status_code, 422)
-        self.assertEqual(mock_send.call_count, 0)
 
     def test_refund_flow_testnet(self):
         def _mask(value: str | None, show: int = 4) -> str:
@@ -578,26 +551,21 @@ class RefundApiTests(unittest.TestCase):
             _log(f"final_balance_ton={balance_nano / 1_000_000_000:.6f}")
             _skip("deposit_not_indexed")
 
-        confirm_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/confirm",
-            json={"tx_hash": deposit_tx},
-            headers=headers_bot,
-        )
-        self.assertEqual(confirm_resp.status_code, 200)
+        db = self.Session()
+        try:
+            deal = db.get(Deal, deal_id)
+            payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+            confirm_payment(db, deal, payment, deposit_tx)
 
-        refund_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/refund",
-            json={"refund_address": refund_address, "reason": "api_testnet"},
-            headers=headers_bot,
-        )
-        self.assertEqual(refund_resp.status_code, 200)
-        refund_payload = refund_resp.json()
-        self.assertTrue(refund_payload["refund_tx_hash"])
-        self.assertEqual(
-            ton_escrow._normalize_address(refund_payload["refund_address"]),
-            ton_escrow._normalize_address(refund_address),
-        )
-        _log(f"refund_tx={refund_payload['refund_tx_hash']}")
+            result = refund_payment(db, deal, refund_address, "api_testnet")
+            self.assertTrue(result.refund_tx_hash)
+            self.assertEqual(
+                ton_escrow._normalize_address(result.refund_address),
+                ton_escrow._normalize_address(refund_address),
+            )
+            _log(f"refund_tx={result.refund_tx_hash}")
+        finally:
+            db.close()
 
     def test_release_flow_testnet(self):
         def _mask(value: str | None, show: int = 4) -> str:
@@ -832,27 +800,22 @@ class RefundApiTests(unittest.TestCase):
             _log(f"final_balance_ton={balance_nano / 1_000_000_000:.6f}")
             _skip("deposit_not_indexed")
 
-        confirm_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/confirm",
-            json={"tx_hash": deposit_tx},
-            headers=headers_bot,
-        )
-        self.assertEqual(confirm_resp.status_code, 200)
+        db = self.Session()
+        try:
+            deal = db.get(Deal, deal_id)
+            payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+            confirm_payment(db, deal, payment, deposit_tx)
 
-        release_resp = self.client.post(
-            f"/escrow/deals/{deal_id}/release",
-            json={"payout_address": payout_address},
-            headers=headers_bot,
-        )
-        self.assertEqual(release_resp.status_code, 200)
-        release_payload = release_resp.json()
-        self.assertTrue(release_payload["release_tx_hash"])
-        self.assertEqual(
-            ton_escrow._normalize_address(release_payload["payout_address"]),
-            ton_escrow._normalize_address(payout_address),
-        )
-        self.assertIsNotNone(release_payload["released_at"])
-        _log(f"release_tx={release_payload['release_tx_hash']}")
+            result = release_payment(db, deal, payout_address)
+            self.assertTrue(result.release_tx_hash)
+            self.assertEqual(
+                ton_escrow._normalize_address(result.payout_address),
+                ton_escrow._normalize_address(payout_address),
+            )
+            self.assertIsNotNone(result.released_at)
+            _log(f"release_tx={result.release_tx_hash}")
+        finally:
+            db.close()
 
         deal_status_resp = self.client.get(f"/bot/deals/{deal_id}", headers=headers_bot)
         self.assertEqual(deal_status_resp.status_code, 200)
