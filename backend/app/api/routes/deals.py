@@ -282,6 +282,25 @@ def get_deal(
     )
 
 
+@router.get("/{deal_id}/events", response_model=list[DealEventOut])
+def list_deal_events(
+    deal_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+) -> list[DealEventOut]:
+    deal = db.get(Deal, deal_id)
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    _get_deal_role_flags(db, deal, user)
+    events = (
+        db.query(DealEvent)
+        .filter(DealEvent.deal_id == deal.id)
+        .order_by(DealEvent.created_at.desc())
+        .all()
+    )
+    return [DealEventOut.model_validate(e) for e in events]
+
+
 @router.post("/{deal_id}/terms", response_model=DealOut)
 def update_terms(
     deal_id: int,

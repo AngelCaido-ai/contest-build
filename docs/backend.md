@@ -399,6 +399,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/deals/` | Создать сделку (из листинга или заявки); 409 если по листингу уже есть активная сделка | JWT |
 | `GET` | `/deals/` | Список сделок текущего пользователя | JWT |
 | `GET` | `/deals/{id}` | Получить сделку | JWT (участник) |
+| `GET` | `/deals/{id}/events` | История событий сделки (новые первыми) | JWT (участник) |
 | `POST` | `/deals/{id}/terms` | Зафиксировать условия сделки | JWT (owner/manager) |
 | `POST` | `/deals/{id}/publish_at` | Установить publish_at | JWT (owner/manager) |
 | `POST` | `/deals/{id}/status` | Изменить статус сделки | JWT (зависит от роли и переходов) |
@@ -500,9 +501,20 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 ### telegram_service.py
 
+Все HTTP-запросы к Telegram Bot API выполняются через `requests.Session` с автоматическим retry:
+- До **3 повторных попыток** при transient-ошибках (429, 500, 502, 503, 504)
+- **Exponential backoff**: 1 с → 2 с → 4 с между попытками
+- При `429 Too Many Requests` учитывается заголовок `Retry-After` от Telegram
+- Таймауты: 30 с для обычных запросов, 60 с для загрузки файлов
+
+Функции:
+
 - `send_message(chat_id, text, reply_markup)` — отправка текстового сообщения
 - `send_media(chat_id, text, media_items)` — отправка медиа (photo/video/document/animation, группа или одиночное)
+- `upload_media_for_user(chat_id, filename, content, content_type)` — загрузка файла в Telegram и получение `file_id`
 - `copy_message(from_chat_id, message_id, to_chat_id)` — копирование сообщения (для проверки удалённых постов)
+- `get_chat_administrators(chat_id)` — получение списка администраторов чата
+- `is_chat_admin(chat_id, tg_user_id)` — проверка, является ли пользователь админом
 
 ---
 
@@ -529,7 +541,7 @@ RQ worker (`SimpleWorker` с `TimerDeathPenalty` для Windows). Подключ
 
 ### `worker/scheduler.py`
 
-Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд:
+Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд. Каждый `enqueue()` обёрнут в `try/except` — сбой одной задачи или временная недоступность Redis не останавливает остальные.
 
 ```
 check_payment_timeouts → scan_escrow_deposits → process_scheduled_posts →
@@ -596,5 +608,5 @@ python -m backend.worker.scheduler
 | JWT | python-jose |
 | Блокчейн | TON (tonsdk, pytoniq) |
 | Шифрование | cryptography (AES-GCM) |
-| Telegram | requests (Bot API), Telethon (MTProto) |
+| Telegram | requests (Bot API, retry через urllib3), Telethon (MTProto) |
 | Валидация | Pydantic v2 + pydantic-settings |

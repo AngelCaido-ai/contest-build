@@ -620,8 +620,20 @@ def _normalize_datetime(value: str) -> str | None:
     if not text:
         return None
     normalized = text.replace("Z", "+00:00")
-    datetime.fromisoformat(normalized)
-    return text
+    try:
+        datetime.fromisoformat(normalized)
+        return text
+    except ValueError:
+        pass
+    import re
+    m = re.match(r"^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s+(\d{1,2}):(\d{2})$", text)
+    if m:
+        day, month = int(m.group(1)), int(m.group(2))
+        year = int(m.group(3)) if m.group(3) else datetime.now().year
+        hour, minute = int(m.group(4)), int(m.group(5))
+        dt = datetime(year, month, day, hour, minute)
+        return dt.strftime("%Y-%m-%dT%H:%M:%S+03:00")
+    raise ValueError(f"Cannot parse datetime: {text}")
 
 
 def _format_message_time(value: str | None) -> str:
@@ -677,8 +689,18 @@ async def _prompt_terms_price(message: Message, deal_id: int) -> None:
     await message.answer("Enter price.", reply_markup=_terms_keyboard(deal_id, "details"))
 
 
-async def _prompt_terms_publish_at(message: Message, deal_id: int) -> None:
-    await message.answer("Enter publish_at in ISO format.", reply_markup=_terms_keyboard(deal_id, "price"))
+async def _prompt_terms_publish_at(message: Message, deal_id: int, state: FSMContext | None = None) -> None:
+    from bot.app.keyboards.calendar import (
+        CAL_CONTEXT_KEY,
+        CAL_DEAL_ID_KEY,
+        build_calendar_keyboard,
+    )
+
+    now = datetime.now()
+    kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
+    if state:
+        await state.update_data(**{CAL_CONTEXT_KEY: "terms", CAL_DEAL_ID_KEY: deal_id})
+    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
 
 
 async def _prompt_terms_verification_window(message: Message, deal_id: int) -> None:
@@ -689,14 +711,18 @@ async def _prompt_terms_format(message: Message, deal_id: int) -> None:
     await message.answer("Enter format or 'skip'.", reply_markup=_terms_keyboard(deal_id, "verification_window"))
 
 
-async def _prompt_publish_at_only(message: Message, deal_id: int) -> None:
-    await message.answer(
-        "Enter publish_at in ISO format.",
-        reply_markup=_nav_keyboard(
-            f"{DEAL_PUBLISH_AT_BACK_PREFIX}{deal_id}",
-            f"{DEAL_PUBLISH_AT_CANCEL_PREFIX}{deal_id}",
-        ),
+async def _prompt_publish_at_only(message: Message, deal_id: int, state: FSMContext | None = None) -> None:
+    from bot.app.keyboards.calendar import (
+        CAL_CONTEXT_KEY,
+        CAL_DEAL_ID_KEY,
+        build_calendar_keyboard,
     )
+
+    now = datetime.now()
+    kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
+    if state:
+        await state.update_data(**{CAL_CONTEXT_KEY: "publish_at", CAL_DEAL_ID_KEY: deal_id})
+    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
 
 
 async def _prompt_creative_status_comment(message: Message, deal_id: int) -> None:
@@ -709,14 +735,18 @@ async def _prompt_creative_status_comment(message: Message, deal_id: int) -> Non
     )
 
 
-async def _prompt_creative_status_publish_at(message: Message, deal_id: int) -> None:
-    await message.answer(
-        "Enter publish_at in ISO format.",
-        reply_markup=_nav_keyboard(
-            f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}",
-            f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}",
-        ),
+async def _prompt_creative_status_publish_at(message: Message, deal_id: int, state: FSMContext | None = None) -> None:
+    from bot.app.keyboards.calendar import (
+        CAL_CONTEXT_KEY,
+        CAL_DEAL_ID_KEY,
+        build_calendar_keyboard,
     )
+
+    now = datetime.now()
+    kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
+    if state:
+        await state.update_data(**{CAL_CONTEXT_KEY: "creative_status", CAL_DEAL_ID_KEY: deal_id})
+    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
 
 
 async def _prompt_deal_message(message: Message, deal_id: int) -> None:
@@ -884,7 +914,7 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
     if draft_state == DealTermsState.price.state:
         await _prompt_terms_price(callback.message, deal_id)
     elif draft_state == DealTermsState.publish_at.state:
-        await _prompt_terms_publish_at(callback.message, deal_id)
+        await _prompt_terms_publish_at(callback.message, deal_id, state=state)
     elif draft_state == DealTermsState.verification_window.state:
         await _prompt_terms_verification_window(callback.message, deal_id)
     elif draft_state == DealTermsState.format.state:
@@ -911,7 +941,7 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
     elif draft_state == CreativeStatusState.comment.state:
         await _prompt_creative_status_comment(callback.message, deal_id)
     elif draft_state == CreativeStatusState.publish_at.state:
-        await _prompt_creative_status_publish_at(callback.message, deal_id)
+        await _prompt_creative_status_publish_at(callback.message, deal_id, state=state)
     await callback.answer()
 
 
@@ -1105,7 +1135,7 @@ async def deal_terms_back(callback: CallbackQuery, state: FSMContext) -> None:
         await _prompt_terms_price(callback.message, deal_id)
     if step == "publish_at":
         await state.set_state(DealTermsState.publish_at)
-        await _prompt_terms_publish_at(callback.message, deal_id)
+        await _prompt_terms_publish_at(callback.message, deal_id, state=state)
     if step == "verification_window":
         await state.set_state(DealTermsState.verification_window)
         await _prompt_terms_verification_window(callback.message, deal_id)
@@ -1155,7 +1185,7 @@ async def deal_publish_at_start(callback: CallbackQuery, state: FSMContext) -> N
     await state.update_data(deal_id=deal_id)
     await state.set_state(DealPublishAtState.publish_at)
     if callback.message:
-        await _prompt_publish_at_only(callback.message, deal_id)
+        await _prompt_publish_at_only(callback.message, deal_id, state=state)
     await callback.answer()
 
 
@@ -1195,7 +1225,7 @@ async def deal_terms_price(message: Message, state: FSMContext) -> None:
     await state.set_state(DealTermsState.publish_at)
     data = await state.get_data()
     deal_id = data["deal_id"]
-    await _prompt_terms_publish_at(message, deal_id)
+    await _prompt_terms_publish_at(message, deal_id, state=state)
 
 
 @router.message(DealTermsState.publish_at)
@@ -1204,10 +1234,10 @@ async def deal_terms_publish_at(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Invalid datetime. Use ISO format.")
+        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
         return
     if not publish_at:
-        await message.answer("Publish_at is required.")
+        await message.answer("Время публикации обязательно.")
         return
     await state.update_data(publish_at=publish_at)
     await state.set_state(DealTermsState.verification_window)
@@ -1257,7 +1287,7 @@ async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Неверный формат даты. Пример: 2026-02-05T18:30:00+03:00.")
+        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
         return
     if not publish_at:
         await message.answer("Время публикации обязательно.")
@@ -1719,7 +1749,7 @@ async def deal_creative_status_set(callback: CallbackQuery, state: FSMContext) -
         if not deal.get("publish_at"):
             await state.update_data(deal_id=deal_id, status=status_value)
             await state.set_state(CreativeStatusState.publish_at)
-            await _prompt_creative_status_publish_at(callback.message, deal_id)
+            await _prompt_creative_status_publish_at(callback.message, deal_id, state=state)
             await callback.answer()
             return
     try:
@@ -1824,10 +1854,10 @@ async def deal_creative_status_publish_at(message: Message, state: FSMContext) -
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Invalid datetime. Use ISO format.")
+        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
         return
     if not publish_at:
-        await message.answer("Publish_at is required.")
+        await message.answer("Время публикации обязательно.")
         return
     data = await state.get_data()
     deal_id = data["deal_id"]
@@ -1871,7 +1901,7 @@ async def deal_creative_status_value(message: Message, state: FSMContext) -> Non
         if not deal.get("publish_at"):
             await state.update_data(status=value)
             await state.set_state(CreativeStatusState.publish_at)
-            await _prompt_creative_status_publish_at(message, deal_id)
+            await _prompt_creative_status_publish_at(message, deal_id, state=state)
             return
     try:
         api_client.update_creative_status(

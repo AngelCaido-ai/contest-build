@@ -14,7 +14,8 @@ import { apiFetch, uploadMedia } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
 import { DealStatusBadge } from "../components/DealStatusBadge";
-import type { DealDetail, DealEvent, DealStatus, MediaFileId } from "../types";
+import { DealEventTimeline } from "../components/DealEventTimeline";
+import type { DealDetail, DealStatus, MediaFileId } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
 
@@ -96,16 +97,6 @@ function formatInt(value: number | null | undefined) {
   return value.toLocaleString("ru-RU");
 }
 
-function formatPayload(payload: DealEvent["payload"]) {
-  if (!payload) return null;
-  try {
-    const text = JSON.stringify(payload);
-    if (text.length <= 160) return text;
-    return text.slice(0, 160) + "…";
-  } catch {
-    return null;
-  }
-}
 
 export function DealDetailPage() {
   useBackButton();
@@ -225,8 +216,6 @@ export function DealDetailPage() {
       showToast("Telegram WebApp недоступен", { type: "error" });
     }
   };
-
-  const events = deal.events ?? [];
 
   const withSubmitting = async (action: () => Promise<void>) => {
     setSubmitting(true);
@@ -676,33 +665,8 @@ export function DealDetailPage() {
         </Group>
       )}
 
-      <Group header="История">
-        {events.length === 0 ? (
-          <div className="px-4 py-3">
-            <Text type="body" color="secondary">
-              Нет событий
-            </Text>
-          </div>
-        ) : (
-          events.map((ev) => (
-            <GroupItem
-              key={ev.id}
-              text={ev.type}
-              description={
-                <div className="flex flex-col gap-0.5">
-                  <Text type="caption1" color="secondary">
-                    {formatDateTime(ev.created_at)}
-                  </Text>
-                  {formatPayload(ev.payload) && (
-                    <Text type="caption1" color="secondary">
-                      {formatPayload(ev.payload)}
-                    </Text>
-                  )}
-                </div>
-              }
-            />
-          ))
-        )}
+      <Group header="История событий">
+        <DealEventTimeline dealId={deal.id} />
       </Group>
 
       {deal.tampered && (

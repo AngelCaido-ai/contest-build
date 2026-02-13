@@ -585,11 +585,17 @@ async def _prompt_listing_respond_brief(message: Message) -> None:
     )
 
 
-async def _prompt_listing_respond_publish_at(message: Message) -> None:
-    await message.answer(
-        "Enter desired publish_at in ISO format or 'skip'.",
-        reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}listing_respond"),
+async def _prompt_listing_respond_publish_at(message: Message, state: FSMContext | None = None) -> None:
+    from bot.app.keyboards.calendar import (
+        CAL_CONTEXT_KEY,
+        build_calendar_keyboard,
     )
+
+    now = datetime.now()
+    kb = build_calendar_keyboard(now.year, now.month, skip_allowed=True)
+    if state:
+        await state.update_data(**{CAL_CONTEXT_KEY: "listing_respond", "cal_skip_allowed": True})
+    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
 
 
 async def _prompt_listing_respond_creative(message: Message) -> None:
@@ -1570,22 +1576,39 @@ async def listing_respond_brief(message: Message, state: FSMContext) -> None:
     brief_value = None if _is_skip(value) else value
     await state.update_data(brief=brief_value)
     await state.set_state(ListingRespondState.publish_at)
-    await _prompt_listing_respond_publish_at(message)
+    await _prompt_listing_respond_publish_at(message, state=state)
 
 
 @router.message(ListingRespondState.publish_at)
 async def listing_respond_publish_at(message: Message, state: FSMContext) -> None:
+    import re
+
     value = (message.text or "").strip()
     if _is_skip(value):
         await state.update_data(publish_at=None)
     else:
         normalized = value.replace("Z", "+00:00")
+        parsed = None
         try:
             datetime.fromisoformat(normalized)
+            parsed = normalized
         except ValueError:
-            await message.answer("publish_at must be ISO format or 'skip'.")
+            pass
+        if not parsed:
+            m = re.match(r"^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s+(\d{1,2}):(\d{2})$", value)
+            if m:
+                day, month = int(m.group(1)), int(m.group(2))
+                year = int(m.group(3)) if m.group(3) else datetime.now().year
+                hour, minute = int(m.group(4)), int(m.group(5))
+                try:
+                    dt = datetime(year, month, day, hour, minute)
+                    parsed = dt.strftime("%Y-%m-%dT%H:%M:%S+03:00")
+                except ValueError:
+                    pass
+        if not parsed:
+            await message.answer("Неверный формат. Используйте календарь или введите: 15.02 18:30")
             return
-        await state.update_data(publish_at=normalized)
+        await state.update_data(publish_at=parsed)
     await state.set_state(ListingRespondState.creative)
     await _prompt_listing_respond_creative(message)
 

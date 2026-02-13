@@ -6,6 +6,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.app.config import settings
 from bot.app.handlers import deals, marketplace, onboarding, start
+from bot.app.keyboards import calendar as calendar_kb
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ async def main() -> None:
         logger.info(f"Bot connected: @{bot_info.username} ({bot_info.first_name})")
         
         dp = Dispatcher(storage=MemoryStorage())
+        dp.include_router(calendar_kb.router)
         dp.include_router(start.router)
         dp.include_router(onboarding.router)
         dp.include_router(marketplace.router)

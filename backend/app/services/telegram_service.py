@@ -1,10 +1,22 @@
 import logging
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["POST"],
+    respect_retry_after_header=True,
+)
+_session = requests.Session()
+_session.mount("https://", HTTPAdapter(max_retries=_retry_strategy))
 
 
 def _post(method: str, payload: dict) -> dict | None:
@@ -13,7 +25,7 @@ def _post(method: str, payload: dict) -> dict | None:
         return None
     url = f"https://api.telegram.org/bot{settings.bot_token}/{method}"
     try:
-        resp = requests.post(url, json=payload)
+        resp = _session.post(url, json=payload, timeout=30)
         if not resp.ok:
             logger.warning("telegram %s: http %s body=%s", method, resp.status_code, resp.text[:200])
             return None
@@ -126,10 +138,11 @@ def upload_media_for_user(chat_id: int, filename: str, content: bytes, content_t
     method, file_field = method_map.get(media_type, ("sendDocument", "document"))
     url = f"https://api.telegram.org/bot{settings.bot_token}/{method}"
     try:
-        resp = requests.post(
+        resp = _session.post(
             url,
             data={"chat_id": chat_id},
             files={file_field: (filename, content, content_type or "application/octet-stream")},
+            timeout=60,
         )
         if not resp.ok:
             logger.warning("upload_media_for_user: http %s body=%s", resp.status_code, resp.text[:200])
@@ -188,9 +201,10 @@ def copy_message(from_chat_id: int, message_id: int, to_chat_id: int) -> bool:
         return False
     url = f"https://api.telegram.org/bot{settings.bot_token}/copyMessage"
     try:
-        resp = requests.post(
+        resp = _session.post(
             url,
             json={"from_chat_id": from_chat_id, "message_id": message_id, "chat_id": to_chat_id},
+            timeout=30,
         )
         if not resp.ok:
             logger.warning("copy_message: http %s from=%s msg=%s", resp.status_code, from_chat_id, message_id)
