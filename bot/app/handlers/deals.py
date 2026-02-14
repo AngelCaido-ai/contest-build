@@ -299,17 +299,17 @@ async def _get_deal_draft(state: FSMContext, deal_id: int) -> dict | None:
 
 
 def _active_deal_text(deal: dict, role: str, draft_available: bool) -> str:
-    header = "Активная сделка"
+    header = "Active deal"
     if draft_available:
-        header = f"{header} (черновик)"
+        header = f"{header} (draft)"
     return f"{header}\n{_deal_text(deal, role)}"
 
 
 def _switch_keyboard(target_deal_id: int):
     builder = InlineKeyboardBuilder()
-    builder.button(text="Сохранить черновик и перейти", callback_data=f"{DEAL_SWITCH_PREFIX}save:{target_deal_id}")
-    builder.button(text="Сбросить и перейти", callback_data=f"{DEAL_SWITCH_PREFIX}discard:{target_deal_id}")
-    builder.button(text="Отмена", callback_data=f"{DEAL_SWITCH_PREFIX}cancel:{target_deal_id}")
+    builder.button(text="Save draft & switch", callback_data=f"{DEAL_SWITCH_PREFIX}save:{target_deal_id}")
+    builder.button(text="Discard & switch", callback_data=f"{DEAL_SWITCH_PREFIX}discard:{target_deal_id}")
+    builder.button(text="Cancel", callback_data=f"{DEAL_SWITCH_PREFIX}cancel:{target_deal_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -416,7 +416,7 @@ async def _maybe_prompt_deal_switch(
     )
     await state.set_state(DealSwitchState.confirm)
     await message.answer(
-        f"Есть незавершенный шаг по сделке #{current_deal_id}. Перейти к сделке #{target_deal_id}?",
+        f"There is an unfinished step on deal #{current_deal_id}. Switch to deal #{target_deal_id}?",
         reply_markup=_switch_keyboard(target_deal_id),
     )
     return True
@@ -441,18 +441,18 @@ def _state_by_name(value: str) -> State | None:
 def _status_label(status: str, options: list[str]) -> str:
     if status == "CANCELED":
         if len(options) == 2 and "CANCELED" in options:
-            return "Отклонить"
-        return "Отменить сделку"
+            return "Reject"
+        return "Cancel deal"
     if len(options) == 2 and "CANCELED" in options:
-        return "Принять"
+        return "Accept"
     return status
 
 
 def _nav_keyboard(back_data: str | None, cancel_data: str):
     builder = InlineKeyboardBuilder()
     if back_data:
-        builder.button(text="Назад", callback_data=back_data)
-    builder.button(text="Отмена", callback_data=cancel_data)
+        builder.button(text="Back", callback_data=back_data)
+    builder.button(text="Cancel", callback_data=cancel_data)
     builder.adjust(2)
     return builder.as_markup()
 
@@ -468,8 +468,8 @@ def _status_keyboard(deal_id: int, statuses: set[str]):
     builder = InlineKeyboardBuilder()
     for status in options:
         builder.button(text=_status_label(status, options), callback_data=f"{DEAL_STATUS_SET_PREFIX}{deal_id}:{status}")
-    builder.button(text="Назад", callback_data=f"{DEAL_STATUS_BACK_PREFIX}{deal_id}")
-    builder.button(text="Отмена", callback_data=f"{DEAL_STATUS_CANCEL_PREFIX}{deal_id}")
+    builder.button(text="Back", callback_data=f"{DEAL_STATUS_BACK_PREFIX}{deal_id}")
+    builder.button(text="Cancel", callback_data=f"{DEAL_STATUS_CANCEL_PREFIX}{deal_id}")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -478,8 +478,8 @@ def _creative_status_keyboard(deal_id: int, statuses: list[str]):
     builder = InlineKeyboardBuilder()
     for status in statuses:
         builder.button(text=status, callback_data=f"{DEAL_CREATIVE_STATUS_SET_PREFIX}{deal_id}:{status}")
-    builder.button(text="Назад", callback_data=f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}")
-    builder.button(text="Отмена", callback_data=f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}")
+    builder.button(text="Back", callback_data=f"{DEAL_CREATIVE_STATUS_BACK_PREFIX}{deal_id}")
+    builder.button(text="Cancel", callback_data=f"{DEAL_CREATIVE_STATUS_CANCEL_PREFIX}{deal_id}")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -549,8 +549,8 @@ def _deal_actions_keyboard(
     allowed_statuses = _allowed_transitions_for_role(status, role)
     builder = InlineKeyboardBuilder()
     if draft_available:
-        builder.button(text="Продолжить черновик", callback_data=f"{DEAL_DRAFT_RESUME_PREFIX}{deal_id}")
-        builder.button(text="Сбросить черновик", callback_data=f"{DEAL_DRAFT_CLEAR_PREFIX}{deal_id}")
+        builder.button(text="Resume draft", callback_data=f"{DEAL_DRAFT_RESUME_PREFIX}{deal_id}")
+        builder.button(text="Clear draft", callback_data=f"{DEAL_DRAFT_CLEAR_PREFIX}{deal_id}")
     if role == ROLE_OWNER and status in {"NEGOTIATING", "TERMS_LOCKED"}:
         builder.button(text="Update terms", callback_data=f"{DEAL_TERMS_PREFIX}{deal_id}")
     if role == ROLE_ADVERTISER and status in {"TERMS_LOCKED", "AWAITING_PAYMENT"}:
@@ -560,8 +560,8 @@ def _deal_actions_keyboard(
     if role == ROLE_ADVERTISER and status in {"CREATIVE_REVIEW"}:
         builder.button(text="Creative status", callback_data=f"{DEAL_CREATIVE_STATUS_PREFIX}{deal_id}")
     if role in {ROLE_ADVERTISER, ROLE_OWNER} and status not in {"RELEASED", "REFUNDED", "CANCELED"}:
-        builder.button(text="Написать сообщение", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
-        builder.button(text="История переписки", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}")
+        builder.button(text="Send message", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
+        builder.button(text="Message history", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}")
     if (
         role == ROLE_OWNER
         and not publish_at
@@ -649,14 +649,14 @@ def _format_message_time(value: str | None) -> str:
 
 def _message_sender_label(value: str | None) -> str:
     if value == ROLE_ADVERTISER:
-        return "Рекламодатель"
+        return "Advertiser"
     if value == ROLE_OWNER:
-        return "Владелец"
-    return "Участник"
+        return "Owner"
+    return "Participant"
 
 
 def _message_history_text(items: list[dict]) -> str:
-    lines = ["История переписки:"]
+    lines = ["Message history:"]
     for item in items:
         payload = item.get("payload") or {}
         sender_role = payload.get("sender_role")
@@ -667,20 +667,20 @@ def _message_history_text(items: list[dict]) -> str:
         if text and len(text) > 180:
             text = f"{text[:177]}..."
         if not text and media_items:
-            text = "[медиа]"
+            text = "[media]"
         if not text:
-            text = "[пусто]"
+            text = "[empty]"
         lines.append(f"{_format_message_time(item.get('created_at'))} {sender}: {text}")
     return "\n".join(lines)
 
 
 def _message_history_keyboard(deal_id: int, before_id: int | None, has_more: bool):
     builder = InlineKeyboardBuilder()
-    builder.button(text="Ответить", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
+    builder.button(text="Reply", callback_data=f"{DEAL_MESSAGE_PREFIX}{deal_id}")
     if has_more and before_id is not None:
-        builder.button(text="Еще", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}:{before_id}")
-    builder.button(text="К сделке", callback_data=f"{DEAL_PREFIX}{deal_id}")
-    builder.button(text="К списку", callback_data="menu:deals")
+        builder.button(text="More", callback_data=f"{DEAL_MESSAGE_HISTORY_PREFIX}{deal_id}:{before_id}")
+    builder.button(text="To deal", callback_data=f"{DEAL_PREFIX}{deal_id}")
+    builder.button(text="To list", callback_data="menu:deals")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -700,7 +700,7 @@ async def _prompt_terms_publish_at(message: Message, deal_id: int, state: FSMCon
     kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
     if state:
         await state.update_data(**{CAL_CONTEXT_KEY: "terms", CAL_DEAL_ID_KEY: deal_id})
-    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
+    await message.answer("Select publish date:", reply_markup=kb.as_markup())
 
 
 async def _prompt_terms_verification_window(message: Message, deal_id: int) -> None:
@@ -722,7 +722,7 @@ async def _prompt_publish_at_only(message: Message, deal_id: int, state: FSMCont
     kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
     if state:
         await state.update_data(**{CAL_CONTEXT_KEY: "publish_at", CAL_DEAL_ID_KEY: deal_id})
-    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
+    await message.answer("Select publish date:", reply_markup=kb.as_markup())
 
 
 async def _prompt_creative_status_comment(message: Message, deal_id: int) -> None:
@@ -746,12 +746,12 @@ async def _prompt_creative_status_publish_at(message: Message, deal_id: int, sta
     kb = build_calendar_keyboard(now.year, now.month, skip_allowed=False)
     if state:
         await state.update_data(**{CAL_CONTEXT_KEY: "creative_status", CAL_DEAL_ID_KEY: deal_id})
-    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
+    await message.answer("Select publish date:", reply_markup=kb.as_markup())
 
 
 async def _prompt_deal_message(message: Message, deal_id: int) -> None:
     await message.answer(
-        "Отправьте сообщение или медиа.",
+        "Send a message or media.",
         reply_markup=_nav_keyboard(
             f"{DEAL_MESSAGE_BACK_PREFIX}{deal_id}",
             f"{DEAL_MESSAGE_CANCEL_PREFIX}{deal_id}",
@@ -871,7 +871,7 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
         return
     draft = await _get_deal_draft(state, deal_id)
     if not draft:
-        await callback.message.answer("Черновик не найден.")
+        await callback.message.answer("Draft not found.")
         await callback.answer()
         return
     draft_state = draft.get("state")
@@ -880,7 +880,7 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(**draft_data)
     state_value = _state_by_name(draft_state) if isinstance(draft_state, str) else None
     if not state_value:
-        await callback.message.answer("Черновик недоступен.")
+        await callback.message.answer("Draft unavailable.")
         await callback.answer()
         return
     await _clear_deal_draft(state, deal_id)
@@ -957,7 +957,7 @@ async def deal_draft_clear(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     await _clear_deal_draft(state, deal_id)
-    await callback.message.answer("Черновик удален.")
+    await callback.message.answer("Draft deleted.")
     try:
         deal = await api_client.get_deal(deal_id)
     except Exception:
@@ -1234,10 +1234,10 @@ async def deal_terms_publish_at(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
+        await message.answer("Invalid format. Use the calendar or enter a date: 15.02 18:30")
         return
     if not publish_at:
-        await message.answer("Время публикации обязательно.")
+        await message.answer("Publish time is required.")
         return
     await state.update_data(publish_at=publish_at)
     await state.set_state(DealTermsState.verification_window)
@@ -1287,10 +1287,10 @@ async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
+        await message.answer("Invalid format. Use the calendar or enter a date: 15.02 18:30")
         return
     if not publish_at:
-        await message.answer("Время публикации обязательно.")
+        await message.answer("Publish time is required.")
         return
     data = await state.get_data()
     payload = {"actor_tg_user_id": message.from_user.id, "publish_at": publish_at}
@@ -1457,7 +1457,7 @@ async def deal_message_start(callback: CallbackQuery, state: FSMContext) -> None
         return
     status = (deal.get("status") or "").upper()
     if status in {"RELEASED", "REFUNDED", "CANCELED"}:
-        await callback.message.answer("Сделка завершена. Переписка недоступна.")
+        await callback.message.answer("Deal is finished. Messaging is unavailable.")
         await callback.answer()
         return
     role = await _resolve_deal_role(callback.from_user.id, deal)
@@ -1527,7 +1527,7 @@ async def deal_message_history(callback: CallbackQuery) -> None:
         return
     if not items:
         await callback.message.answer(
-            "Сообщений пока нет.",
+            "No messages yet.",
             reply_markup=_message_history_keyboard(deal_id, None, False),
         )
         await callback.answer()
@@ -1561,7 +1561,7 @@ async def deal_message_content(message: Message, state: FSMContext) -> None:
     if message.document:
         media_file_ids = [{"type": "document", "file_id": message.document.file_id}]
     if not text and not media_file_ids:
-        await message.answer("Отправьте текст или медиа.")
+        await message.answer("Send text or media.")
         return
     data = await state.get_data()
     deal_id = data.get("deal_id")
@@ -1578,7 +1578,7 @@ async def deal_message_content(message: Message, state: FSMContext) -> None:
                 "media_file_ids": media_file_ids,
             },
         )
-        await message.answer("Сообщение отправлено.")
+        await message.answer("Message sent.")
     except Exception as exc:
         await message.answer(f"Failed to send message: {exc}")
     await _clear_deal_draft(state, int(deal_id))
@@ -1854,10 +1854,10 @@ async def deal_creative_status_publish_at(message: Message, state: FSMContext) -
     try:
         publish_at = _normalize_datetime(value)
     except ValueError:
-        await message.answer("Неверный формат. Используйте календарь или введите дату: 15.02 18:30")
+        await message.answer("Invalid format. Use the calendar or enter a date: 15.02 18:30")
         return
     if not publish_at:
-        await message.answer("Время публикации обязательно.")
+        await message.answer("Publish time is required.")
         return
     data = await state.get_data()
     deal_id = data["deal_id"]

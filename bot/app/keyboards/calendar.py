@@ -23,21 +23,21 @@ CAL_DEAL_ID_KEY = "cal_deal_id"
 
 MONTH_NAMES = [
     "",
-    "Январь",
-    "Февраль",
-    "Март",
-    "Апрель",
-    "Май",
-    "Июнь",
-    "Июль",
-    "Август",
-    "Сентябрь",
-    "Октябрь",
-    "Ноябрь",
-    "Декабрь",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ]
 
-WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 
 
 def _ign_btn(text: str = " ") -> InlineKeyboardButton:
@@ -85,14 +85,14 @@ def build_calendar_keyboard(
         builder.row(*row)
 
     if skip_allowed:
-        builder.row(InlineKeyboardButton(text="Пропустить", callback_data=DTP_SKIP))
+        builder.row(InlineKeyboardButton(text="Skip", callback_data=DTP_SKIP))
 
     return builder
 
 
 def build_hour_keyboard(date_str: str) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
-    builder.row(_ign_btn(f"📅 {_format_date_label(date_str)} — час"))
+    builder.row(_ign_btn(f"📅 {_format_date_label(date_str)} — hour"))
 
     for start in range(0, 24, 6):
         row = []
@@ -107,13 +107,13 @@ def build_hour_keyboard(date_str: str) -> InlineKeyboardBuilder:
 
     parts = date_str.rsplit("-", 1)
     ym = f"{parts[0]}" if len(parts) == 2 else date_str[:7]
-    builder.row(InlineKeyboardButton(text="◀ Назад", callback_data=f"{DTP_NAV}{ym}"))
+    builder.row(InlineKeyboardButton(text="◀ Back", callback_data=f"{DTP_NAV}{ym}"))
     return builder
 
 
 def build_minute_keyboard(date_str: str, hour: str) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
-    builder.row(_ign_btn(f"📅 {_format_date_label(date_str)} {hour}:__ — минуты"))
+    builder.row(_ign_btn(f"📅 {_format_date_label(date_str)} {hour}:__ — minutes"))
 
     for start in range(0, 60, 30):
         row = []
@@ -126,7 +126,7 @@ def build_minute_keyboard(date_str: str, hour: str) -> InlineKeyboardBuilder:
             )
         builder.row(*row)
 
-    builder.row(InlineKeyboardButton(text="◀ Назад", callback_data=f"{DTP_DAY}{date_str}"))
+    builder.row(InlineKeyboardButton(text="◀ Back", callback_data=f"{DTP_DAY}{date_str}"))
     return builder
 
 
@@ -153,7 +153,7 @@ async def _on_navigate(callback: CallbackQuery, state: FSMContext) -> None:
         parts = raw.split("-")
         year, month = int(parts[0]), int(parts[1])
     except (ValueError, IndexError):
-        await callback.answer("Ошибка навигации")
+        await callback.answer("Navigation error")
         return
 
     data = await state.get_data()
@@ -163,7 +163,7 @@ async def _on_navigate(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
         try:
             await callback.message.edit_text(
-                "Выберите дату публикации:",
+                "Select publish date:",
                 reply_markup=kb.as_markup(),
             )
         except Exception:
@@ -178,7 +178,7 @@ async def _on_day(callback: CallbackQuery) -> None:
     if callback.message:
         try:
             await callback.message.edit_text(
-                "Выберите час:",
+                "Select hour:",
                 reply_markup=kb.as_markup(),
             )
         except Exception:
@@ -191,14 +191,14 @@ async def _on_hour(callback: CallbackQuery) -> None:
     raw = callback.data[len(DTP_HOUR):]
     parts = raw.rsplit(":", 1)
     if len(parts) != 2:
-        await callback.answer("Ошибка")
+        await callback.answer("Error")
         return
     date_str, hour = parts[0], parts[1]
     kb = build_minute_keyboard(date_str, hour)
     if callback.message:
         try:
             await callback.message.edit_text(
-                "Выберите минуты:",
+                "Select minutes:",
                 reply_markup=kb.as_markup(),
             )
         except Exception:
@@ -211,7 +211,7 @@ async def _on_minute(callback: CallbackQuery, state: FSMContext) -> None:
     raw = callback.data[len(DTP_MIN):]
     parts = raw.rsplit(":", 2)
     if len(parts) != 3:
-        await callback.answer("Ошибка")
+        await callback.answer("Error")
         return
     date_str, hour, minute = parts[0], parts[1], parts[2]
     iso_str = f"{date_str}T{hour}:{minute}:00+03:00"
@@ -258,7 +258,7 @@ async def _dispatch_result(
         await state.set_state(DealTermsState.verification_window)
         if msg:
             if display:
-                await msg.answer(f"📅 Дата публикации: {display}")
+                await msg.answer(f"📅 Publish date: {display}")
             await _prompt_terms_verification_window(msg, deal_id)
 
     elif ctx == "publish_at":
@@ -269,10 +269,10 @@ async def _dispatch_result(
         try:
             api_client.update_publish_at(deal_id, payload)
             if msg:
-                await msg.answer(f"📅 Время публикации обновлено: {display}")
+                await msg.answer(f"📅 Publish time updated: {display}")
         except Exception as exc:
             if msg:
-                await msg.answer(f"Ошибка: {exc}")
+                await msg.answer(f"Error: {exc}")
         await _clear_state_keep(state)
         if msg:
             await _send_deal_details(msg, deal_id, state=state)
@@ -296,10 +296,10 @@ async def _dispatch_result(
                 },
             )
             if msg:
-                await msg.answer(f"📅 Креатив одобрен, дата: {display}")
+                await msg.answer(f"📅 Creative approved, date: {display}")
         except Exception as exc:
             if msg:
-                await msg.answer(f"Ошибка: {exc}")
+                await msg.answer(f"Error: {exc}")
         await _clear_deal_draft(state, deal_id)
         await _clear_state_keep(state)
         if msg:
@@ -315,9 +315,9 @@ async def _dispatch_result(
         await state.set_state(ListingRespondState.creative)
         if msg:
             if display:
-                await msg.answer(f"📅 Дата публикации: {display}")
+                await msg.answer(f"📅 Publish date: {display}")
             elif iso_str is None:
-                await msg.answer("Дата публикации пропущена.")
+                await msg.answer("Publish date skipped.")
             await _prompt_listing_respond_creative(msg)
 
     await callback.answer()

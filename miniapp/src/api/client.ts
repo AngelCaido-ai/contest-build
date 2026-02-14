@@ -18,7 +18,7 @@ export function getAuthToken() {
 }
 
 export class NetworkError extends Error {
-  constructor(message = "Нет подключения к интернету") {
+  constructor(message = "No internet connection") {
     super(message);
     this.name = "NetworkError";
   }

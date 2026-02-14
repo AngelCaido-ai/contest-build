@@ -18,7 +18,7 @@ import { DateTimePickerField, localInputToIso } from "../components/DateTimePick
 
 function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
-  return new Intl.NumberFormat("ru-RU").format(value);
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function formatMaybeJson(value: unknown): string {
@@ -82,16 +82,16 @@ export function RequestDetailPage() {
     if (!selectedChannel) return;
     try {
       await apiFetch(`/stats/channels/${selectedChannel.id}/refresh`, { method: "POST" });
-      showToast("Статистика обновлена", { type: "success" });
+      showToast("Stats updated", { type: "success" });
       refetchChannels();
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
   const respond = async () => {
     if (!request || !selectedChannel) {
-      showToast("Выберите канал", { type: "error" });
+      showToast("Select a channel", { type: "error" });
       return;
     }
     try {
@@ -99,11 +99,11 @@ export function RequestDetailPage() {
       const parsedWindow = verificationWindow.trim() ? Number(verificationWindow) : null;
       const publishAtIso = localInputToIso(publishAt);
       if (publishAt.trim() && !publishAtIso) {
-        showToast("Некорректная дата публикации", { type: "error" });
+        showToast("Invalid publish date", { type: "error" });
         return;
       }
       if ((dealPrice.trim() && Number.isNaN(parsedPrice)) || (verificationWindow.trim() && Number.isNaN(parsedWindow))) {
-        showToast("Цена и окно верификации должны быть числом", { type: "error" });
+        showToast("Price and verification window must be numbers", { type: "error" });
         return;
       }
       const deal = await apiFetch<{ id: number }>("/deals", {
@@ -118,18 +118,18 @@ export function RequestDetailPage() {
           verification_window: parsedWindow,
         }),
       });
-      showToast("Сделка создана", { type: "success" });
+      showToast("Deal created", { type: "success" });
       navigate(`/deals/${deal.id}`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
   if (!id || Number.isNaN(requestId)) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">Некорректная заявка</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">Invalid request</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -145,8 +145,8 @@ export function RequestDetailPage() {
   if (requestError || !request) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">{requestError ?? "Заявка не найдена"}</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">{requestError ?? "Request not found"}</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -155,9 +155,9 @@ export function RequestDetailPage() {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
         <Text type="body" color="danger">
-          {channelsError ?? "Сначала добавьте канал"}
+          {channelsError ?? "Add a channel first"}
         </Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -167,10 +167,10 @@ export function RequestDetailPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Предпросмотр
+        Preview
       </Text>
 
-      <Group header="Канал">
+      <Group header="Channel">
         <div className="px-4 py-2">
           <Select
             options={channelOptions}
@@ -179,40 +179,40 @@ export function RequestDetailPage() {
           />
         </div>
         <GroupItem
-          text="Статистика"
+          text="Stats"
           description={
             stats
-              ? `${formatNumber(stats.subscribers)} подписчиков · ${formatNumber(stats.views_per_post)} просмотров`
-              : "Статистика не загружена"
+              ? `${formatNumber(stats.subscribers)} subscribers · ${formatNumber(stats.views_per_post)} views`
+              : "Stats not loaded"
           }
-          after={<Button text="Обновить" type="secondary" onClick={refreshStats} />}
+          after={<Button text="Refresh" type="secondary" onClick={refreshStats} />}
         />
       </Group>
 
-      <Group header="Условия заявки">
+      <Group header="Request Terms">
         <GroupItem
-          text="Бюджет"
+          text="Budget"
           after={<Text type="body">{request.budget != null ? `$${request.budget}` : "—"}</Text>}
         />
         <GroupItem
-          text="Ниша"
+          text="Niche"
           after={<Text type="body">{request.niche ?? "—"}</Text>}
         />
         <GroupItem
-          text="Языки"
+          text="Languages"
           after={<Text type="body">{request.languages?.length ? request.languages.join(", ") : "—"}</Text>}
         />
         <GroupItem
-          text="Мин. подписчики"
+          text="Min. subscribers"
           after={<Text type="body">{formatNumber(request.min_subs)}</Text>}
         />
         <GroupItem
-          text="Мин. просмотры"
+          text="Min. views"
           after={<Text type="body">{formatNumber(request.min_views)}</Text>}
         />
       </Group>
 
-      <Group header="Даты">
+      <Group header="Dates">
         <div className="px-4 py-3">
           <Text type="body" color="secondary">
             {formatMaybeJson(request.dates)}
@@ -221,7 +221,7 @@ export function RequestDetailPage() {
       </Group>
 
       {request.brief && (
-        <Group header="Бриф">
+        <Group header="Brief">
           <div className="px-4 py-3">
             <Text type="body" color="secondary">
               {request.brief}
@@ -230,24 +230,24 @@ export function RequestDetailPage() {
         </Group>
       )}
 
-      <Group header="Параметры отклика">
+      <Group header="Response Parameters">
         <div className="flex flex-col gap-3 px-4 py-3">
           <Input
-            placeholder="Ваша цена (опционально)"
+            placeholder="Your price (optional)"
             type="text"
             value={dealPrice}
             onChange={(v) => setDealPrice(v)}
             numeric
           />
           <Input
-            placeholder="Формат"
+            placeholder="Format"
             type="text"
             value={dealFormat}
             onChange={(v) => setDealFormat(v)}
           />
           <DateTimePickerField value={publishAt} onChange={setPublishAt} />
           <Input
-            placeholder="verification_window (мин)"
+            placeholder="verification_window (min)"
             type="text"
             value={verificationWindow}
             onChange={(v) => setVerificationWindow(v)}
@@ -256,7 +256,7 @@ export function RequestDetailPage() {
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={4}
-            placeholder="Комментарий/условия к сделке"
+            placeholder="Comment/deal terms"
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
           />
@@ -264,8 +264,8 @@ export function RequestDetailPage() {
       </Group>
 
       <div className="flex flex-col gap-2 pt-2">
-        <Button text="Откликнуться" type="primary" onClick={respond} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Respond" type="primary" onClick={respond} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

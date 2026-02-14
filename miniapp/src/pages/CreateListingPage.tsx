@@ -44,7 +44,7 @@ export function CreateListingPage() {
 
   const submit = async () => {
     if (!channelId) {
-      showToast("Выберите канал", { type: "error" });
+      showToast("Select a channel", { type: "error" });
       return;
     }
     let constraintsValue: Record<string, unknown> | null = null;
@@ -52,7 +52,7 @@ export function CreateListingPage() {
       try {
         constraintsValue = JSON.parse(constraints);
       } catch {
-        showToast("Поле constraints должно быть JSON", { type: "error" });
+        showToast("Constraints field must be valid JSON", { type: "error" });
         return;
       }
     }
@@ -72,7 +72,7 @@ export function CreateListingPage() {
       (priceUsd.trim() && Number.isNaN(payload.price_usd as number)) ||
       (priceTon.trim() && Number.isNaN(payload.price_ton as number))
     ) {
-      showToast("Цена должна быть числом", { type: "error" });
+      showToast("Price must be a number", { type: "error" });
       return;
     }
     setSubmitting(true);
@@ -81,10 +81,10 @@ export function CreateListingPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      showToast("Листинг создан", { type: "success" });
+      showToast("Listing created", { type: "success" });
       navigate("/listings");
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -94,16 +94,16 @@ export function CreateListingPage() {
     return (
       <div className="flex flex-col gap-4">
         <Text type="title2" weight="bold">
-          Создать листинг
+          Create Listing
         </Text>
         <Group>
           <div className="px-4 py-3">
             <Text type="body" color="secondary">
-              Сначала добавьте канал, где вы владелец.
+              First add a channel where you are the owner.
             </Text>
           </div>
         </Group>
-        <Button text="К каналам" type="primary" onClick={() => navigate("/channels")} />
+        <Button text="Go to Channels" type="primary" onClick={() => navigate("/channels")} />
       </div>
     );
   }
@@ -111,34 +111,34 @@ export function CreateListingPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Создать листинг
+        Create Listing
       </Text>
 
-      <Group header="Основное">
+      <Group header="General">
         <div className="flex flex-col gap-3 px-4 py-3">
           <Select options={channelOptions} value={channelId} onChange={(v) => setChannelId(v)} />
           <Input
-            placeholder="Цена USD (опционально)"
+            placeholder="Price USD (optional)"
             type="text"
             value={priceUsd}
             onChange={(v) => setPriceUsd(v)}
             numeric
           />
           <Input
-            placeholder="Цена TON (опционально)"
+            placeholder="Price TON (optional)"
             type="text"
             value={priceTon}
             onChange={(v) => setPriceTon(v)}
             numeric
           />
           <Input
-            placeholder="Формат (например post)"
+            placeholder="Format (e.g. post)"
             type="text"
             value={format}
             onChange={(v) => setFormat(v)}
           />
           <Input
-            placeholder="Категории через запятую"
+            placeholder="Categories, comma-separated"
             type="text"
             value={categories}
             onChange={(v) => setCategories(v)}
@@ -146,7 +146,7 @@ export function CreateListingPage() {
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={4}
-            placeholder='constraints JSON, например {"lang":"ru"}'
+            placeholder='constraints JSON, e.g. {"lang":"en"}'
             value={constraints}
             onChange={(e) => setConstraints(e.target.value)}
           />
@@ -154,8 +154,8 @@ export function CreateListingPage() {
       </Group>
 
       <div className="flex flex-col gap-2">
-        <Button text="Создать" type="primary" loading={submitting} onClick={submit} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Create" type="primary" loading={submitting} onClick={submit} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

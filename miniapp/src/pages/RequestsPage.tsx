@@ -32,15 +32,15 @@ export function RequestsPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Заявки рекламодателей
+        Advertiser Requests
       </Text>
-      <Button text="Создать заявку" type="primary" onClick={() => navigate("/requests/new")} />
+      <Button text="Create Request" type="primary" onClick={() => navigate("/requests/new")} />
 
-      <Group header="Фильтры">
+      <Group header="Filters">
         <div className="flex gap-2 px-4 py-2">
           <div className="min-w-0 flex-1">
             <Input
-              placeholder="Бюджет от"
+              placeholder="Budget from"
               type="text"
               numeric
               value={budgetMin}
@@ -49,7 +49,7 @@ export function RequestsPage() {
           </div>
           <div className="min-w-0 flex-1">
             <Input
-              placeholder="Бюджет до"
+              placeholder="Budget to"
               type="text"
               numeric
               value={budgetMax}
@@ -58,7 +58,7 @@ export function RequestsPage() {
           </div>
         </div>
         <div className="px-4 pb-3">
-          <Button text="Применить" type="secondary" onClick={refetch} />
+          <Button text="Apply" type="secondary" onClick={refetch} />
         </div>
       </Group>
 
@@ -77,7 +77,7 @@ export function RequestsPage() {
       {!loading && error && (
         <EmptyState
           icon="⚠️"
-          title="Ошибка загрузки"
+          title="Loading error"
           description={error}
         />
       )}
@@ -85,31 +85,31 @@ export function RequestsPage() {
       {!loading && !error && (!requests || requests.length === 0) && (
         <EmptyState
           icon="📝"
-          title="Нет заявок"
-          description="Попробуйте изменить фильтры"
+          title="No requests"
+          description="Try adjusting the filters"
         />
       )}
 
       {!loading && requests && requests.length > 0 && (
-        <Group header="Заявки">
+        <Group header="Requests">
           {requests.map((item) => (
             <GroupItem
               key={item.id}
               text={
                 item.budget != null
-                  ? `Бюджет: $${item.budget}`
-                  : "Бюджет не указан"
+                  ? `Budget: $${item.budget}`
+                  : "Budget not specified"
               }
               description={
                 [
-                  item.niche && `Ниша: ${item.niche}`,
+                  item.niche && `Niche: ${item.niche}`,
                   item.brief && item.brief.slice(0, 80),
-                  item.languages?.length && `Языки: ${item.languages.join(", ")}`,
+                  item.languages?.length && `Languages: ${item.languages.join(", ")}`,
                 ]
                   .filter(Boolean)
-                  .join(" · ") || "Без описания"
+                  .join(" · ") || "No description"
               }
-              after={<Button text="Откликнуться" type="primary" onClick={() => navigate(`/requests/${item.id}`)} />}
+              after={<Button text="Respond" type="primary" onClick={() => navigate(`/requests/${item.id}`)} />}
               onClick={() => navigate(`/requests/${item.id}`)}
               chevron
             />

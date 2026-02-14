@@ -2,10 +2,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Text } from "@telegram-tools/ui-kit";
 
 const tabs = [
-  { path: "/listings", label: "Каталог", icon: "📋" },
-  { path: "/requests", label: "Заявки", icon: "📝" },
-  { path: "/channels", label: "Каналы", icon: "📺" },
-  { path: "/deals", label: "Сделки", icon: "🤝" },
+  { path: "/listings", label: "Listings", icon: "📋" },
+  { path: "/requests", label: "Requests", icon: "📝" },
+  { path: "/channels", label: "Channels", icon: "📺" },
+  { path: "/deals", label: "Deals", icon: "🤝" },
 ];
 
 export function BottomNav() {

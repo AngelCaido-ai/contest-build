@@ -5,30 +5,30 @@ import { useApi } from "../hooks/useApi";
 import type { DealEvent, DealStatus } from "../types";
 
 const EVENT_LABELS: Record<string, { label: string; icon: string }> = {
-  DEAL_CREATED: { label: "Сделка создана", icon: "🆕" },
-  TERMS_LOCKED: { label: "Условия зафиксированы", icon: "🔒" },
-  STATUS_UPDATED: { label: "Статус изменён", icon: "🔄" },
-  PUBLISH_AT_UPDATED: { label: "Дата публикации обновлена", icon: "📅" },
-  PUBLISH_AT_REQUESTED: { label: "Запрошена дата публикации", icon: "📅" },
-  CREATIVE_SUBMITTED: { label: "Креатив отправлен", icon: "🎨" },
-  CREATIVE_STATUS: { label: "Статус креатива", icon: "✏️" },
-  ADVERTISER_BRIEF: { label: "Бриф рекламодателя", icon: "📋" },
+  DEAL_CREATED: { label: "Deal created", icon: "🆕" },
+  TERMS_LOCKED: { label: "Terms locked", icon: "🔒" },
+  STATUS_UPDATED: { label: "Status updated", icon: "🔄" },
+  PUBLISH_AT_UPDATED: { label: "Publish date updated", icon: "📅" },
+  PUBLISH_AT_REQUESTED: { label: "Publish date requested", icon: "📅" },
+  CREATIVE_SUBMITTED: { label: "Creative submitted", icon: "🎨" },
+  CREATIVE_STATUS: { label: "Creative status", icon: "✏️" },
+  ADVERTISER_BRIEF: { label: "Advertiser brief", icon: "📋" },
 };
 
 const STATUS_LABELS: Record<DealStatus, string> = {
-  NEGOTIATING: "Переговоры",
-  TERMS_LOCKED: "Условия согласованы",
-  AWAITING_PAYMENT: "Ожидание оплаты",
-  FUNDED: "Оплачено",
-  CREATIVE_DRAFT: "Черновик креатива",
-  CREATIVE_REVIEW: "Ревью креатива",
-  APPROVED: "Одобрено",
-  SCHEDULED: "Запланировано",
-  POSTED: "Опубликовано",
-  VERIFYING: "Проверка",
-  RELEASED: "Завершено",
-  REFUNDED: "Возврат",
-  CANCELED: "Отменено",
+  NEGOTIATING: "Negotiating",
+  TERMS_LOCKED: "Terms Locked",
+  AWAITING_PAYMENT: "Awaiting Payment",
+  FUNDED: "Funded",
+  CREATIVE_DRAFT: "Creative Draft",
+  CREATIVE_REVIEW: "Creative Review",
+  APPROVED: "Approved",
+  SCHEDULED: "Scheduled",
+  POSTED: "Posted",
+  VERIFYING: "Verifying",
+  RELEASED: "Released",
+  REFUNDED: "Refunded",
+  CANCELED: "Canceled",
 };
 
 function formatEventDate(value: string) {
@@ -40,10 +40,10 @@ function formatEventDate(value: string) {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = d.toDateString() === yesterday.toDateString();
 
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  if (isToday) return `Сегодня, ${time}`;
-  if (isYesterday) return `Вчера, ${time}`;
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) + `, ${time}`;
+  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  if (isToday) return `Today, ${time}`;
+  if (isYesterday) return `Yesterday, ${time}`;
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short" }) + `, ${time}`;
 }
 
 function renderPayloadDetails(type: string, payload: DealEvent["payload"]) {
@@ -52,27 +52,27 @@ function renderPayloadDetails(type: string, payload: DealEvent["payload"]) {
   const details: string[] = [];
 
   if (type === "TERMS_LOCKED") {
-    if (payload.price != null) details.push(`Цена: $${payload.price}`);
-    if (payload.format) details.push(`Формат: ${payload.format}`);
-    if (payload.publish_at) details.push(`Дата: ${new Date(payload.publish_at as string).toLocaleDateString("ru-RU")}`);
-    if (payload.verification_window) details.push(`Окно верификации: ${payload.verification_window} мин`);
+    if (payload.price != null) details.push(`Price: $${payload.price}`);
+    if (payload.format) details.push(`Format: ${payload.format}`);
+    if (payload.publish_at) details.push(`Date: ${new Date(payload.publish_at as string).toLocaleDateString("en-US")}`);
+    if (payload.verification_window) details.push(`Verification window: ${payload.verification_window} min`);
   } else if (type === "STATUS_UPDATED" && payload.status) {
     const label = STATUS_LABELS[payload.status as DealStatus] ?? payload.status;
     details.push(`→ ${label}`);
   } else if (type === "CREATIVE_SUBMITTED" && payload.version) {
-    details.push(`Версия ${payload.version}`);
+    details.push(`Version ${payload.version}`);
   } else if (type === "CREATIVE_STATUS") {
-    if (payload.status === "APPROVED") details.push("Одобрен");
-    else if (payload.status === "DRAFT") details.push("Отправлен на доработку");
+    if (payload.status === "APPROVED") details.push("Approved");
+    else if (payload.status === "DRAFT") details.push("Sent for revision");
     if (payload.comment) details.push(`«${payload.comment}»`);
-    if (payload.publish_at) details.push(`Дата: ${new Date(payload.publish_at as string).toLocaleDateString("ru-RU")}`);
+    if (payload.publish_at) details.push(`Date: ${new Date(payload.publish_at as string).toLocaleDateString("en-US")}`);
   } else if (type === "PUBLISH_AT_UPDATED" || type === "PUBLISH_AT_REQUESTED") {
-    if (payload.publish_at) details.push(new Date(payload.publish_at as string).toLocaleDateString("ru-RU"));
+    if (payload.publish_at) details.push(new Date(payload.publish_at as string).toLocaleDateString("en-US"));
   } else if (type === "ADVERTISER_BRIEF") {
     if (payload.text) details.push(String(payload.text).length > 80 ? String(payload.text).slice(0, 80) + "…" : String(payload.text));
-    if (payload.publish_at) details.push(`Дата: ${new Date(payload.publish_at as string).toLocaleDateString("ru-RU")}`);
+    if (payload.publish_at) details.push(`Date: ${new Date(payload.publish_at as string).toLocaleDateString("en-US")}`);
     if (Array.isArray(payload.media_file_ids) && payload.media_file_ids.length > 0) {
-      details.push(`${payload.media_file_ids.length} файл(ов)`);
+      details.push(`${payload.media_file_ids.length} file(s)`);
     }
   } else {
     try {
@@ -137,7 +137,7 @@ export function DealEventTimeline({ dealId }: Props) {
   if (!events || events.length === 0) {
     return (
       <div className="px-4 py-3">
-        <Text type="body" color="secondary">Нет событий</Text>
+        <Text type="body" color="secondary">No events</Text>
       </div>
     );
   }
@@ -183,7 +183,7 @@ export function DealEventTimeline({ dealId }: Props) {
       {hasMore && !expanded && (
         <div className="pt-1 pb-2 px-4">
           <Button
-            text={`Показать все (${events.length})`}
+            text={`Show all (${events.length})`}
             type="secondary"
             onClick={() => setExpanded(true)}
           />

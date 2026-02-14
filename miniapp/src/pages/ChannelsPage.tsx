@@ -50,7 +50,7 @@ export function ChannelsPage() {
       const items = await apiFetch<Manager[]>(`/channels/${channelId}/managers`);
       setManagers(items);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setManagersLoading(false);
     }
@@ -62,7 +62,7 @@ export function ChannelsPage() {
       const items = await apiFetch<TgAdmin[]>(`/channels/${channelId}/tg-admins`);
       setTgAdmins(items);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setAdminsLoading(false);
     }
@@ -83,10 +83,10 @@ export function ChannelsPage() {
   const refreshStats = async (channelId: number) => {
     try {
       await apiFetch(`/stats/channels/${channelId}/refresh`, { method: "POST" });
-      showToast("Статистика обновлена", { type: "success" });
+      showToast("Stats updated", { type: "success" });
       refetch();
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
@@ -97,10 +97,10 @@ export function ChannelsPage() {
         method: "POST",
         body: JSON.stringify({ tg_user_id: admin.tg_user_id }),
       });
-      showToast("Менеджер добавлен", { type: "success" });
+      showToast("Manager added", { type: "success" });
       await loadManagers(selectedChannelId);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
@@ -110,21 +110,21 @@ export function ChannelsPage() {
       await apiFetch(`/channels/${selectedChannelId}/managers/${managerId}`, {
         method: "DELETE",
       });
-      showToast("Менеджер удален", { type: "success" });
+      showToast("Manager removed", { type: "success" });
       await loadManagers(selectedChannelId);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Мои каналы
+        My Channels
       </Text>
       <div className="flex gap-2">
-        <Button text="Добавить канал" type="primary" onClick={() => navigate("/channels/new")} />
-        <Button text="Кошелек" type="secondary" onClick={() => navigate("/wallet")} />
+        <Button text="Add Channel" type="primary" onClick={() => navigate("/channels/new")} />
+        <Button text="Wallet" type="secondary" onClick={() => navigate("/wallet")} />
       </div>
 
       {loading && (
@@ -142,25 +142,25 @@ export function ChannelsPage() {
       {!loading && (!channels || channels.length === 0) && (
         <EmptyState
           icon="📺"
-          title="Нет каналов"
-          description="Добавьте канал через miniapp"
+          title="No channels"
+          description="Add a channel via the miniapp"
         />
       )}
 
       {!loading && channels && channels.length > 0 && (
-        <Group header="Каналы">
+        <Group header="Channels">
           {channels.map((ch) => (
             <GroupItem
               key={ch.id}
               text={ch.title ?? ch.username ?? `#${ch.tg_chat_id}`}
               description={
                 ch.stats
-                  ? `${ch.stats.subscribers ?? "?"} подписчиков · ${ch.stats.views_per_post ?? "?"} просмотров`
-                  : "Статистика не загружена"
+                  ? `${ch.stats.subscribers ?? "?"} subscribers · ${ch.stats.views_per_post ?? "?"} views`
+                  : "Stats not loaded"
               }
               after={
                 <Button
-                  text="Обновить"
+                  text="Refresh"
                   type="secondary"
                   onClick={() => refreshStats(ch.id)}
                 />
@@ -175,22 +175,22 @@ export function ChannelsPage() {
       {selectedChannelId && isOwner && (
         <>
           {managersLoading ? (
-            <Group header="Менеджеры">
+            <Group header="Managers">
               <GroupItem
                 text={<SkeletonElement style={{ width: "50%", height: 16 }} />}
               />
             </Group>
           ) : managers.length === 0 ? (
-            <EmptyState icon="👤" title="Нет менеджеров" />
+            <EmptyState icon="👤" title="No managers" />
           ) : (
-            <Group header="Менеджеры">
+            <Group header="Managers">
               {managers.map((m) => (
                 <GroupItem
                   key={m.id}
                   text={m.tg_username ? `@${m.tg_username}` : `User #${m.tg_user_id}`}
                   after={
                     <Button
-                      text="Удалить"
+                      text="Remove"
                       type="secondary"
                       onClick={() => removeManager(m.id)}
                     />
@@ -201,27 +201,27 @@ export function ChannelsPage() {
           )}
 
           {adminsLoading ? (
-            <Group header="Админы канала">
+            <Group header="Channel Admins">
               <GroupItem
                 text={<SkeletonElement style={{ width: "50%", height: 16 }} />}
               />
             </Group>
           ) : availableAdmins.length > 0 ? (
-            <Group header="Админы канала">
+            <Group header="Channel Admins">
               {availableAdmins.map((a) => (
                 <GroupItem
                   key={a.tg_user_id}
                   text={a.first_name}
                   description={
                     a.tg_username
-                      ? `@${a.tg_username} · ${a.status === "creator" ? "владелец" : "админ"}`
+                      ? `@${a.tg_username} · ${a.status === "creator" ? "owner" : "admin"}`
                       : a.status === "creator"
-                        ? "владелец"
-                        : "админ"
+                        ? "owner"
+                        : "admin"
                   }
                   after={
                     <Button
-                      text="Назначить"
+                      text="Assign"
                       type="primary"
                       onClick={() => addManager(a)}
                     />
@@ -234,7 +234,7 @@ export function ChannelsPage() {
               type="caption"
               style={{ color: "var(--tg-theme-hint-color)", textAlign: "center" }}
             >
-              Все админы канала уже назначены менеджерами
+              All channel admins are already assigned as managers
             </Text>
           ) : null}
         </>

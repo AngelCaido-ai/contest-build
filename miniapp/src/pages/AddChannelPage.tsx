@@ -15,12 +15,12 @@ export function AddChannelPage() {
 
   const submit = async () => {
     if (!tgChatId.trim()) {
-      showToast("Укажите tg_chat_id канала", { type: "error" });
+      showToast("Please enter the channel tg_chat_id", { type: "error" });
       return;
     }
     const parsedId = Number(tgChatId.trim());
     if (Number.isNaN(parsedId)) {
-      showToast("tg_chat_id должен быть числом", { type: "error" });
+      showToast("tg_chat_id must be a number", { type: "error" });
       return;
     }
     setSubmitting(true);
@@ -34,10 +34,10 @@ export function AddChannelPage() {
           bot_admin_status: true,
         }),
       });
-      showToast("Канал добавлен", { type: "success" });
+      showToast("Channel added", { type: "success" });
       navigate("/channels");
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -46,38 +46,38 @@ export function AddChannelPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Добавить канал
+        Add Channel
       </Text>
 
-      <Group header="Данные канала">
+      <Group header="Channel Data">
         <div className="flex flex-col gap-3 px-4 py-3">
           <Input
-            placeholder="tg_chat_id (например -100123...)"
+            placeholder="tg_chat_id (e.g. -100123...)"
             type="text"
             value={tgChatId}
             onChange={(v) => setTgChatId(v)}
           />
           <Input
-            placeholder="username канала (опционально)"
+            placeholder="Channel username (optional)"
             type="text"
             value={username}
             onChange={(v) => setUsername(v)}
           />
           <Input
-            placeholder="Название канала (опционально)"
+            placeholder="Channel name (optional)"
             type="text"
             value={title}
             onChange={(v) => setTitle(v)}
           />
           <Text type="caption1" color="secondary">
-            Перед добавлением проверьте, что бот является админом канала.
+            Before adding, make sure the bot is an admin of the channel.
           </Text>
         </div>
       </Group>
 
       <div className="flex flex-col gap-2">
-        <Button text="Добавить канал" type="primary" loading={submitting} onClick={submit} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Add Channel" type="primary" loading={submitting} onClick={submit} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

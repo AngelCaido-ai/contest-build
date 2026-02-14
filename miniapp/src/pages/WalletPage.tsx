@@ -21,7 +21,7 @@ export function WalletPage() {
   const save = async () => {
     const value = wallet.trim();
     if (!value) {
-      showToast("Укажите адрес кошелька", { type: "error" });
+      showToast("Please enter a wallet address", { type: "error" });
       return;
     }
     setSaving(true);
@@ -30,10 +30,10 @@ export function WalletPage() {
         method: "POST",
         body: JSON.stringify({ linked_wallet: value }),
       });
-      showToast("Кошелек сохранен", { type: "success" });
+      showToast("Wallet saved", { type: "success" });
       navigate(-1);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setSaving(false);
     }
@@ -42,10 +42,10 @@ export function WalletPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Кошелек для выплат
+        Payout Wallet
       </Text>
 
-      <Group header="TON адрес">
+      <Group header="TON Address">
         <div className="px-4 py-3">
           <Input
             placeholder="EQ..."
@@ -57,8 +57,8 @@ export function WalletPage() {
       </Group>
 
       <div className="flex flex-col gap-2">
-        <Button text="Сохранить" type="primary" loading={saving} onClick={save} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Save" type="primary" loading={saving} onClick={save} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

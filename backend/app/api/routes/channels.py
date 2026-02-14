@@ -156,7 +156,7 @@ def list_tg_admins(
     if admins is None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Не удалось получить список админов из Telegram",
+            detail="Failed to get admin list from Telegram",
         )
     result = []
     for admin in admins:
@@ -190,7 +190,7 @@ def add_manager(
         if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Пользователь не найден. Попросите его написать /start боту.",
+                detail="User not found. Ask them to send /start to the bot.",
             )
     elif payload.user_id:
         target_user = db.get(User, payload.user_id)
@@ -204,14 +204,14 @@ def add_manager(
         if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Пользователь не найден. Попросите его написать /start боту.",
+                detail="User not found. Ask them to send /start to the bot.",
             )
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     if not telegram_service.is_chat_admin(channel.tg_chat_id, target_user.tg_user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Пользователь не является админом этого канала",
+            detail="User is not an admin of this channel",
         )
     existing = (
         db.query(ChannelManager)

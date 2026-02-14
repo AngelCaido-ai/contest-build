@@ -59,35 +59,35 @@ export function DateTimePickerField({ value, onChange, allowEmpty = true }: Date
           className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
           onClick={() => applyPreset(inHours(1))}
         >
-          Через 1ч
+          In 1h
         </button>
         <button
           type="button"
           className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
           onClick={() => applyPreset(inHours(3))}
         >
-          Через 3ч
+          In 3h
         </button>
         <button
           type="button"
           className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
           onClick={() => applyPreset(inHours(6))}
         >
-          Через 6ч
+          In 6h
         </button>
         <button
           type="button"
           className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
           onClick={() => applyPreset(tomorrowAt(12, 0))}
         >
-          Завтра 12:00
+          Tomorrow 12:00
         </button>
         <button
           type="button"
           className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
           onClick={() => applyPreset(tomorrowAt(18, 0))}
         >
-          Завтра 18:00
+          Tomorrow 18:00
         </button>
         {allowEmpty && (
           <button
@@ -95,12 +95,12 @@ export function DateTimePickerField({ value, onChange, allowEmpty = true }: Date
             className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
             onClick={() => onChange("")}
           >
-            Очистить
+            Clear
           </button>
         )}
       </div>
       <Text type="caption1" color="secondary">
-        Можно выбрать дату и время или использовать быстрые кнопки.
+        You can pick a date and time or use quick buttons.
       </Text>
     </div>
   );

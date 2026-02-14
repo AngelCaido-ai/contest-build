@@ -49,14 +49,14 @@ export function PaymentPage() {
   const copyAddress = () => {
     if (escrow?.deposit_address) {
       navigator.clipboard.writeText(escrow.deposit_address);
-      showToast("Адрес скопирован", { type: "success" });
+      showToast("Address copied", { type: "success" });
     }
   };
 
   const sendTransaction = async () => {
     if (!escrow) return;
     if (!wallet) {
-      showToast("Подключите кошелек", { type: "error" });
+      showToast("Please connect a wallet", { type: "error" });
       return;
     }
     setSending(true);
@@ -73,10 +73,10 @@ export function PaymentPage() {
           },
         ],
       });
-      showToast("Транзакция отправлена", { type: "success" });
+      showToast("Transaction sent", { type: "success" });
       navigate(`/deals/${id}`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка транзакции", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Transaction error", { type: "error" });
     } finally {
       setSending(false);
     }
@@ -93,8 +93,8 @@ export function PaymentPage() {
   if (error || !escrow) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">{error ?? "Не удалось создать депозит"}</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">{error ?? "Failed to create deposit"}</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -102,7 +102,7 @@ export function PaymentPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Оплата сделки #{id}
+        Deal Payment #{id}
       </Text>
 
       {escrow.confirmed_at ? (
@@ -110,10 +110,10 @@ export function PaymentPage() {
           <div className="flex flex-col items-center gap-3 py-6">
             <span className="text-4xl">✅</span>
             <Text type="title3" weight="bold" color="accent">
-              Оплата подтверждена
+              Payment confirmed
             </Text>
             <Button
-              text="К сделке"
+              text="Go to Deal"
               type="primary"
               onClick={() => navigate(`/deals/${id}`)}
             />
@@ -121,7 +121,7 @@ export function PaymentPage() {
         </Group>
       ) : (
         <>
-          <Group header="Депозитный адрес">
+          <Group header="Deposit Address">
             <div className="flex flex-col items-center gap-4 py-4">
               <QRCodeSVG
                 value={`ton://transfer/${escrow.deposit_address}${escrow.expected_amount ? `?amount=${Math.round(escrow.expected_amount * 1e9)}` : ""}`}
@@ -140,20 +140,20 @@ export function PaymentPage() {
             </div>
           </Group>
 
-          <Group header="Сумма">
+          <Group header="Amount">
             <GroupItem
-              text="К оплате"
+              text="To pay"
               after={
                 <Text type="body" weight="bold">
                   {escrow.expected_amount != null
                     ? `${escrow.expected_amount} TON`
-                    : "Не указана"}
+                    : "Not specified"}
                 </Text>
               }
             />
             {escrow.deposit_comment && (
               <GroupItem
-                text="Комментарий"
+                text="Comment"
                 after={<Text type="body">{escrow.deposit_comment}</Text>}
               />
             )}
@@ -162,13 +162,13 @@ export function PaymentPage() {
           <div className="flex flex-col gap-2 pt-2">
             {!wallet && (
               <Button
-                text="Подключить кошелек"
+                text="Connect Wallet"
                 type="secondary"
                 onClick={() => tonConnectUI.openModal()}
               />
             )}
             <Button
-              text={wallet ? "Оплатить через TonConnect" : "Оплатить"}
+              text={wallet ? "Pay via TonConnect" : "Pay"}
               type="primary"
               loading={sending}
               disabled={!wallet}

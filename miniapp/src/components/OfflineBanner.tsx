@@ -32,7 +32,7 @@ export function OfflineBanner() {
         backgroundColor: online ? "#22c55e" : "#ef4444",
       }}
     >
-      <span>{online ? "Соединение восстановлено" : "Нет подключения к интернету"}</span>
+      <span>{online ? "Connection restored" : "No internet connection"}</span>
     </div>
   );
 }

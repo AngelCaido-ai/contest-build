@@ -23,7 +23,7 @@ export function CreateRequestPage() {
       try {
         datesValue = JSON.parse(dates);
       } catch {
-        showToast("Поле dates должно быть JSON", { type: "error" });
+        showToast("Dates field must be valid JSON", { type: "error" });
         return;
       }
     }
@@ -44,7 +44,7 @@ export function CreateRequestPage() {
       (minSubs.trim() && Number.isNaN(payload.min_subs as number)) ||
       (minViews.trim() && Number.isNaN(payload.min_views as number))
     ) {
-      showToast("Числовые поля заполнены неверно", { type: "error" });
+      showToast("Numeric fields are filled incorrectly", { type: "error" });
       return;
     }
     setSubmitting(true);
@@ -53,10 +53,10 @@ export function CreateRequestPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      showToast("Заявка создана", { type: "success" });
+      showToast("Request created", { type: "success" });
       navigate("/requests");
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -65,39 +65,39 @@ export function CreateRequestPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Создать заявку
+        Create Request
       </Text>
 
-      <Group header="Параметры">
+      <Group header="Parameters">
         <div className="flex flex-col gap-3 px-4 py-3">
           <Input
-            placeholder="Бюджет USD"
+            placeholder="Budget USD"
             type="text"
             value={budget}
             onChange={(v) => setBudget(v)}
             numeric
           />
           <Input
-            placeholder="Ниша"
+            placeholder="Niche"
             type="text"
             value={niche}
             onChange={(v) => setNiche(v)}
           />
           <Input
-            placeholder="Языки через запятую"
+            placeholder="Languages, comma-separated"
             type="text"
             value={languages}
             onChange={(v) => setLanguages(v)}
           />
           <Input
-            placeholder="Минимум подписчиков"
+            placeholder="Min subscribers"
             type="text"
             value={minSubs}
             onChange={(v) => setMinSubs(v)}
             numeric
           />
           <Input
-            placeholder="Минимум просмотров"
+            placeholder="Min views"
             type="text"
             value={minViews}
             onChange={(v) => setMinViews(v)}
@@ -106,14 +106,14 @@ export function CreateRequestPage() {
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={3}
-            placeholder='dates JSON, например {"from":"2026-02-10","to":"2026-02-20"}'
+            placeholder='dates JSON, e.g. {"from":"2026-02-10","to":"2026-02-20"}'
             value={dates}
             onChange={(e) => setDates(e.target.value)}
           />
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={4}
-            placeholder="Бриф"
+            placeholder="Brief"
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
           />
@@ -121,8 +121,8 @@ export function CreateRequestPage() {
       </Group>
 
       <div className="flex flex-col gap-2">
-        <Button text="Создать" type="primary" loading={submitting} onClick={submit} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Create" type="primary" loading={submitting} onClick={submit} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

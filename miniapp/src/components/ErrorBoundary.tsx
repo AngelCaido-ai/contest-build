@@ -35,19 +35,19 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
           <span className="text-5xl">😵</span>
           <p className="text-lg font-semibold" style={{ color: "var(--tg-theme-text-color)" }}>
-            Что-то пошло не так
+            Something went wrong
           </p>
           <p className="text-sm" style={{ color: "var(--tg-theme-hint-color)" }}>
-            Произошла непредвиденная ошибка.
+            An unexpected error occurred.
             <br />
-            Попробуйте обновить страницу.
+            Please try refreshing the page.
           </p>
           <button
             onClick={this.reset}
             className="mt-2 rounded-xl px-6 py-2.5 text-sm font-medium text-white"
             style={{ backgroundColor: "var(--tg-theme-button-color, #3b82f6)" }}
           >
-            Попробовать снова
+            Try again
           </button>
         </div>
       );
@@ -62,19 +62,19 @@ export function GlobalErrorFallback() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <span className="text-5xl">😵</span>
       <p className="text-lg font-semibold" style={{ color: "var(--tg-theme-text-color)" }}>
-        Приложение не может продолжить работу
+        Application cannot continue
       </p>
       <p className="text-sm" style={{ color: "var(--tg-theme-hint-color)" }}>
-        Произошла критическая ошибка.
+        A critical error occurred.
         <br />
-        Попробуйте перезагрузить приложение.
+        Please try reloading the application.
       </p>
       <button
         onClick={() => window.location.reload()}
         className="mt-2 rounded-xl px-6 py-2.5 text-sm font-medium text-white"
         style={{ backgroundColor: "var(--tg-theme-button-color, #3b82f6)" }}
       >
-        Перезагрузить
+        Reload
       </button>
     </div>
   );

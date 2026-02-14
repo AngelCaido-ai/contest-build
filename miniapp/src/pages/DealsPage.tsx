@@ -14,20 +14,20 @@ import { DealStatusBadge } from "../components/DealStatusBadge";
 import type { Deal, DealStatus } from "../types";
 
 const STATUS_OPTIONS = [
-  { value: "__all__", label: "Все статусы" },
-  { value: "NEGOTIATING", label: "Переговоры" },
-  { value: "TERMS_LOCKED", label: "Условия согласованы" },
-  { value: "AWAITING_PAYMENT", label: "Ожидание оплаты" },
-  { value: "FUNDED", label: "Оплачено" },
-  { value: "CREATIVE_DRAFT", label: "Черновик креатива" },
-  { value: "CREATIVE_REVIEW", label: "Ревью креатива" },
-  { value: "APPROVED", label: "Одобрено" },
-  { value: "SCHEDULED", label: "Запланировано" },
-  { value: "POSTED", label: "Опубликовано" },
-  { value: "VERIFYING", label: "Проверка" },
-  { value: "RELEASED", label: "Завершено" },
-  { value: "REFUNDED", label: "Возврат" },
-  { value: "CANCELED", label: "Отменено" },
+  { value: "__all__", label: "All statuses" },
+  { value: "NEGOTIATING", label: "Negotiating" },
+  { value: "TERMS_LOCKED", label: "Terms Locked" },
+  { value: "AWAITING_PAYMENT", label: "Awaiting Payment" },
+  { value: "FUNDED", label: "Funded" },
+  { value: "CREATIVE_DRAFT", label: "Creative Draft" },
+  { value: "CREATIVE_REVIEW", label: "Creative Review" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "SCHEDULED", label: "Scheduled" },
+  { value: "POSTED", label: "Posted" },
+  { value: "VERIFYING", label: "Verifying" },
+  { value: "RELEASED", label: "Released" },
+  { value: "REFUNDED", label: "Refunded" },
+  { value: "CANCELED", label: "Canceled" },
 ];
 
 export function DealsPage() {
@@ -45,10 +45,10 @@ export function DealsPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Мои сделки
+        My Deals
       </Text>
 
-      <Group header="Фильтр по статусу">
+      <Group header="Filter by Status">
         <div className="px-4 py-2">
           <Select
             options={STATUS_OPTIONS}
@@ -73,17 +73,17 @@ export function DealsPage() {
       {!loading && filtered.length === 0 && (
         <EmptyState
           icon="🤝"
-          title="Нет сделок"
-          description="Создайте сделку через каталог или заявки"
+          title="No deals"
+          description="Create a deal through listings or requests"
         />
       )}
 
       {!loading && filtered.length > 0 && (
-        <Group header="Сделки">
+        <Group header="Deals">
           {filtered.map((deal) => (
             <GroupItem
               key={deal.id}
-              text={`Сделка #${deal.id}`}
+              text={`Deal #${deal.id}`}
               description={
                 <div className="flex items-center gap-2">
                   <DealStatusBadge status={deal.status as DealStatus} />

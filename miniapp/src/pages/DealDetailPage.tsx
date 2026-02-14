@@ -61,18 +61,18 @@ function getCta(status: DealStatus): { label: string; action: "pay" | "bot" | nu
   switch (status) {
     case "NEGOTIATING":
     case "TERMS_LOCKED":
-      return { label: "Перейти к оплате", action: "pay" };
+      return { label: "Proceed to Payment", action: "pay" };
     case "AWAITING_PAYMENT":
-      return { label: "Оплатить", action: "pay" };
+      return { label: "Pay", action: "pay" };
     case "FUNDED":
     case "CREATIVE_DRAFT":
     case "CREATIVE_REVIEW":
     case "APPROVED":
     case "SCHEDULED":
-      return { label: "Перейти в бота", action: "bot" };
+      return { label: "Open Bot", action: "bot" };
     case "POSTED":
     case "VERIFYING":
-      return { label: "Проверить в боте", action: "bot" };
+      return { label: "Check in Bot", action: "bot" };
     default:
       return { label: "", action: null };
   }
@@ -82,19 +82,19 @@ function formatDate(value: string | null | undefined) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("ru-RU");
+  return d.toLocaleDateString("en-US");
 }
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("ru-RU");
+  return d.toLocaleString("en-US");
 }
 
 function formatInt(value: number | null | undefined) {
   if (value == null) return "—";
-  return value.toLocaleString("ru-RU");
+  return value.toLocaleString("en-US");
 }
 
 
@@ -139,8 +139,8 @@ export function DealDetailPage() {
   if (error || !deal) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">{error ?? "Сделка не найдена"}</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">{error ?? "Deal not found"}</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -161,12 +161,12 @@ export function DealDetailPage() {
   const canSendBrief = role === "advertiser" && !["RELEASED", "REFUNDED", "CANCELED"].includes(status);
   const canViewCreative = CREATIVE_VIEW_STATUSES.has(status);
   const wizardSteps = [
-    ...(canEditTerms ? [{ key: "terms", title: "Условия" }] : []),
-    ...(canSetPublishAt || allowedStatuses.length > 0 ? [{ key: "workflow", title: "Дата и статус" }] : []),
-    ...(canCreateCreative ? [{ key: "creative", title: "Креатив" }] : []),
-    ...(canReviewCreative ? [{ key: "review", title: "Ревью" }] : []),
-    ...(canSendBrief ? [{ key: "brief", title: "Бриф" }] : []),
-    ...(canViewCreative ? [{ key: "view", title: "Просмотр" }] : []),
+    ...(canEditTerms ? [{ key: "terms", title: "Terms" }] : []),
+    ...(canSetPublishAt || allowedStatuses.length > 0 ? [{ key: "workflow", title: "Date & Status" }] : []),
+    ...(canCreateCreative ? [{ key: "creative", title: "Creative" }] : []),
+    ...(canReviewCreative ? [{ key: "review", title: "Review" }] : []),
+    ...(canSendBrief ? [{ key: "brief", title: "Brief" }] : []),
+    ...(canViewCreative ? [{ key: "view", title: "View" }] : []),
   ];
   const safeWizardStep = wizardSteps.length > 0 ? Math.min(wizardStep, wizardSteps.length - 1) : 0;
   const activeWizardStep = wizardSteps[safeWizardStep]?.key ?? null;
@@ -193,7 +193,7 @@ export function DealDetailPage() {
       if (tg) {
         tg.openTelegramLink(`${BOT_URL}?start=deal_${deal.id}`);
       } else {
-        showToast("Telegram WebApp недоступен", { type: "error" });
+        showToast("Telegram WebApp is not available", { type: "error" });
       }
     }
   };
@@ -203,7 +203,7 @@ export function DealDetailPage() {
     if (tg) {
       tg.openTelegramLink(`${BOT_URL}?start=deal_${deal.id}`);
     } else {
-      showToast("Telegram WebApp недоступен", { type: "error" });
+      showToast("Telegram WebApp is not available", { type: "error" });
     }
   };
 
@@ -213,7 +213,7 @@ export function DealDetailPage() {
     if (tg) {
       tg.openTelegramLink(`https://t.me/${channelUsername}`);
     } else {
-      showToast("Telegram WebApp недоступен", { type: "error" });
+      showToast("Telegram WebApp is not available", { type: "error" });
     }
   };
 
@@ -223,7 +223,7 @@ export function DealDetailPage() {
       await action();
       await refetch();
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -237,7 +237,7 @@ export function DealDetailPage() {
       if (termsPublishAt.trim()) {
         const publishAtIso = localInputToIso(termsPublishAt);
         if (!publishAtIso) {
-          throw new Error("Некорректная дата публикации");
+          throw new Error("Invalid publish date");
         }
         payload.publish_at = publishAtIso;
       }
@@ -246,16 +246,16 @@ export function DealDetailPage() {
         (payload.price !== undefined && Number.isNaN(payload.price as number)) ||
         (payload.verification_window !== undefined && Number.isNaN(payload.verification_window as number))
       ) {
-        throw new Error("Цена и окно верификации должны быть числом");
+        throw new Error("Price and verification window must be numbers");
       }
       if (Object.keys(payload).length === 0) {
-        throw new Error("Заполните хотя бы одно поле");
+        throw new Error("Fill in at least one field");
       }
       await apiFetch(`/deals/${deal.id}/terms`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      showToast("Условия обновлены", { type: "success" });
+      showToast("Terms updated", { type: "success" });
     });
   };
 
@@ -263,13 +263,13 @@ export function DealDetailPage() {
     await withSubmitting(async () => {
       const publishAtIso = localInputToIso(publishAtValue);
       if (!publishAtIso) {
-        throw new Error("Укажите publish_at");
+        throw new Error("Please specify publish_at");
       }
       await apiFetch(`/deals/${deal.id}/publish_at`, {
         method: "POST",
         body: JSON.stringify({ publish_at: publishAtIso }),
       });
-      showToast("Дата публикации обновлена", { type: "success" });
+      showToast("Publish date updated", { type: "success" });
     });
   };
 
@@ -277,20 +277,20 @@ export function DealDetailPage() {
     await withSubmitting(async () => {
       const selectedStatus = statusValue ?? allowedStatuses[0];
       if (!selectedStatus) {
-        throw new Error("Выберите статус");
+        throw new Error("Select a status");
       }
       await apiFetch(`/deals/${deal.id}/status`, {
         method: "POST",
         body: JSON.stringify({ status: selectedStatus }),
       });
-      showToast("Статус обновлен", { type: "success" });
+      showToast("Status updated", { type: "success" });
     });
   };
 
   const submitCreative = async () => {
     await withSubmitting(async () => {
       if (!creativeText.trim() && creativeMedia.length === 0) {
-        throw new Error("Добавьте текст или медиа");
+        throw new Error("Add text or media");
       }
       await apiFetch(`/deals/${deal.id}/creative`, {
         method: "POST",
@@ -299,7 +299,7 @@ export function DealDetailPage() {
           media_file_ids: creativeMedia.length > 0 ? creativeMedia : null,
         }),
       });
-      showToast("Креатив отправлен", { type: "success" });
+      showToast("Creative submitted", { type: "success" });
       setCreativeText("");
       setCreativeMedia([]);
     });
@@ -308,11 +308,11 @@ export function DealDetailPage() {
   const submitCreativeReview = async () => {
     await withSubmitting(async () => {
       if (!creativeStatus) {
-        throw new Error("Выберите статус креатива");
+        throw new Error("Select a creative status");
       }
       const publishAtIso = localInputToIso(creativePublishAt);
       if (creativePublishAt.trim() && !publishAtIso) {
-        throw new Error("Некорректная дата публикации");
+        throw new Error("Invalid publish date");
       }
       await apiFetch(`/deals/${deal.id}/creative/status`, {
         method: "POST",
@@ -322,7 +322,7 @@ export function DealDetailPage() {
           publish_at: publishAtIso,
         }),
       });
-      showToast("Ревью отправлено", { type: "success" });
+      showToast("Review submitted", { type: "success" });
       setCreativeComment("");
     });
   };
@@ -331,10 +331,10 @@ export function DealDetailPage() {
     await withSubmitting(async () => {
       const publishAtIso = localInputToIso(briefPublishAt);
       if (briefPublishAt.trim() && !publishAtIso) {
-        throw new Error("Некорректная дата публикации");
+        throw new Error("Invalid publish date");
       }
       if (!briefText.trim() && !publishAtIso && briefMedia.length === 0) {
-        throw new Error("Заполните бриф или дату публикации");
+        throw new Error("Fill in brief or publish date");
       }
       await apiFetch(`/deals/${deal.id}/advertiser_brief`, {
         method: "POST",
@@ -344,7 +344,7 @@ export function DealDetailPage() {
           media_file_ids: briefMedia.length > 0 ? briefMedia : null,
         }),
       });
-      showToast("Бриф отправлен", { type: "success" });
+      showToast("Brief submitted", { type: "success" });
       setBriefText("");
       setBriefMedia([]);
     });
@@ -356,9 +356,9 @@ export function DealDetailPage() {
     try {
       const uploaded = await uploadMedia(file);
       setCreativeMedia((prev) => [...prev, { type: uploaded.type, file_id: uploaded.file_id }]);
-      showToast("Медиа добавлено", { type: "success" });
+      showToast("Media added", { type: "success" });
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка загрузки", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Upload error", { type: "error" });
     } finally {
       setCreativeUploading(false);
     }
@@ -370,9 +370,9 @@ export function DealDetailPage() {
     try {
       const uploaded = await uploadMedia(file);
       setBriefMedia((prev) => [...prev, { type: uploaded.type, file_id: uploaded.file_id }]);
-      showToast("Медиа добавлено", { type: "success" });
+      showToast("Media added", { type: "success" });
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка загрузки", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Upload error", { type: "error" });
     } finally {
       setBriefUploading(false);
     }
@@ -389,14 +389,14 @@ export function DealDetailPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <Text type="title2" weight="bold">
-          Сделка #{deal.id}
+          Deal #{deal.id}
         </Text>
         <DealStatusBadge status={deal.status as DealStatus} />
       </div>
 
-      <Group header="Канал">
+      <Group header="Channel">
         <GroupItem
-          text="Канал"
+          text="Channel"
           after={<Text type="body">{channelTitle}</Text>}
           description={
             <div className="flex flex-col gap-0.5">
@@ -406,7 +406,7 @@ export function DealDetailPage() {
                 </Text>
               )}
               <Text type="caption1" color="secondary">
-                Подписчики: {formatInt(deal.channel_info?.subscribers)} · Просмотры/пост:{" "}
+                Subscribers: {formatInt(deal.channel_info?.subscribers)} · Views/post:{" "}
                 {formatInt(deal.channel_info?.views_per_post)}
               </Text>
             </div>
@@ -416,17 +416,17 @@ export function DealDetailPage() {
         />
       </Group>
 
-      <Group header="Детали">
-        <GroupItem text="ID сделки" after={<Text type="body">{deal.id}</Text>} />
+      <Group header="Details">
+        <GroupItem text="Deal ID" after={<Text type="body">{deal.id}</Text>} />
         {deal.price != null && (
-          <GroupItem text="Цена" after={<Text type="body">${deal.price}</Text>} />
+          <GroupItem text="Price" after={<Text type="body">${deal.price}</Text>} />
         )}
         <GroupItem
-          text="Формат"
+          text="Format"
           after={<Text type="body">{deal.format ?? "—"}</Text>}
         />
         <GroupItem
-          text="Рекламодатель"
+          text="Advertiser"
           after={
             <Text type="body">
               {deal.advertiser_info?.tg_username
@@ -436,40 +436,40 @@ export function DealDetailPage() {
           }
         />
         <GroupItem
-          text="Листинг"
+          text="Listing"
           after={<Text type="body">{deal.listing_id ?? "—"}</Text>}
         />
         <GroupItem
-          text="Заявка"
+          text="Request"
           after={<Text type="body">{deal.request_id ?? "—"}</Text>}
         />
-        <GroupItem text="Создана" after={<Text type="body">{formatDateTime(deal.created_at)}</Text>} />
-        <GroupItem text="Обновлена" after={<Text type="body">{formatDateTime(deal.updated_at)}</Text>} />
+        <GroupItem text="Created" after={<Text type="body">{formatDateTime(deal.created_at)}</Text>} />
+        <GroupItem text="Updated" after={<Text type="body">{formatDateTime(deal.updated_at)}</Text>} />
       </Group>
 
-      <Group header="Публикация и проверка">
-        <GroupItem text="Публикация (план)" after={<Text type="body">{formatDate(deal.publish_at)}</Text>} />
-        <GroupItem text="Публикация (факт)" after={<Text type="body">{formatDateTime(deal.posted_at)}</Text>} />
+      <Group header="Publishing & Verification">
+        <GroupItem text="Publish (planned)" after={<Text type="body">{formatDate(deal.publish_at)}</Text>} />
+        <GroupItem text="Publish (actual)" after={<Text type="body">{formatDateTime(deal.posted_at)}</Text>} />
         <GroupItem
-          text="ID сообщения"
+          text="Message ID"
           after={<Text type="body">{deal.posted_message_id ?? "—"}</Text>}
         />
         <GroupItem
-          text="Окно верификации"
+          text="Verification window"
           after={
             <Text type="body">
-              {deal.verification_window != null ? `${deal.verification_window} мин` : "—"}
+              {deal.verification_window != null ? `${deal.verification_window} min` : "—"}
             </Text>
           }
         />
         <GroupItem
-          text="Проверка началась"
+          text="Verification started"
           after={<Text type="body">{formatDateTime(deal.verification_started_at)}</Text>}
         />
       </Group>
 
       {deal.brief && (
-        <Group header="Бриф">
+        <Group header="Brief">
           <div className="px-4 py-3">
             <Text type="body" color="secondary">
               {deal.brief}
@@ -480,35 +480,35 @@ export function DealDetailPage() {
 
       {(canEditTerms || canSetPublishAt || allowedStatuses.length > 0 || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative) && (
         <Text type="title3" weight="bold">
-          Действия
+          Actions
         </Text>
       )}
 
       {wizardSteps.length > 0 && (
-        <Group header="Пошаговый сценарий">
+        <Group header="Step-by-Step Wizard">
           <div className="flex flex-col gap-3 px-4 py-3">
             <Text type="body">
-              Шаг {safeWizardStep + 1} из {wizardSteps.length}: {wizardSteps[safeWizardStep]?.title}
+              Step {safeWizardStep + 1} of {wizardSteps.length}: {wizardSteps[safeWizardStep]?.title}
             </Text>
             <Text type="caption1" color="secondary">
               {wizardSteps.map((step, index) => `${index + 1}. ${step.title}`).join("  |  ")}
             </Text>
             <div className="flex gap-2">
               <Button
-                text="Назад"
+                text="Back"
                 type="secondary"
                 disabled={safeWizardStep <= 0}
                 onClick={() => setWizardStep((prev) => Math.max(prev - 1, 0))}
               />
               <Button
-                text="Далее"
+                text="Next"
                 type="secondary"
                 disabled={safeWizardStep >= wizardSteps.length - 1}
                 onClick={() => setWizardStep((prev) => Math.min(prev + 1, wizardSteps.length - 1))}
               />
             </div>
             <Button
-              text={showAllActions ? "Показывать по шагам" : "Показать все блоки"}
+              text={showAllActions ? "Show step by step" : "Show all sections"}
               type="secondary"
               onClick={() => setShowAllActions((prev) => !prev)}
             />
@@ -517,63 +517,63 @@ export function DealDetailPage() {
       )}
 
       {canEditTerms && isStepVisible("terms") && (
-        <Group header="Условия сделки">
+        <Group header="Deal Terms">
           <div className="flex flex-col gap-3 px-4 py-3">
             <Input
-              placeholder="Цена"
+              placeholder="Price"
               type="text"
               value={termsPrice}
               onChange={(v) => setTermsPrice(v)}
               numeric
             />
             <Input
-              placeholder="Формат"
+              placeholder="Format"
               type="text"
               value={termsFormat}
               onChange={(v) => setTermsFormat(v)}
             />
             <DateTimePickerField value={termsPublishAt} onChange={setTermsPublishAt} />
             <Input
-              placeholder="verification_window (мин)"
+              placeholder="verification_window (min)"
               type="text"
               value={termsWindow}
               onChange={(v) => setTermsWindow(v)}
               numeric
             />
-            <Button text="Зафиксировать условия" type="primary" loading={submitting} onClick={submitTerms} />
+            <Button text="Lock Terms" type="primary" loading={submitting} onClick={submitTerms} />
           </div>
         </Group>
       )}
 
       {canSetPublishAt && isStepVisible("workflow") && (
-        <Group header="Дата публикации">
+        <Group header="Publish Date">
           <div className="flex flex-col gap-3 px-4 py-3">
             <DateTimePickerField value={publishAtValue} onChange={setPublishAtValue} allowEmpty={false} />
-            <Button text="Обновить дату" type="secondary" loading={submitting} onClick={submitPublishAt} />
+            <Button text="Update Date" type="secondary" loading={submitting} onClick={submitPublishAt} />
           </div>
         </Group>
       )}
 
       {allowedStatuses.length > 0 && isStepVisible("workflow") && (
-        <Group header="Смена статуса">
+        <Group header="Status Change">
           <div className="flex flex-col gap-3 px-4 py-3">
             <Select
               options={statusOptions}
               value={statusValue ?? (statusOptions.length > 0 ? statusOptions[0].value : null)}
               onChange={(v) => setStatusValue(v)}
             />
-            <Button text="Обновить статус" type="secondary" loading={submitting} onClick={submitStatus} />
+            <Button text="Update Status" type="secondary" loading={submitting} onClick={submitStatus} />
           </div>
         </Group>
       )}
 
       {canCreateCreative && isStepVisible("creative") && (
-        <Group header="Креатив">
+        <Group header="Creative">
           <div className="flex flex-col gap-3 px-4 py-3">
             <textarea
               className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
               rows={4}
-              placeholder="Текст креатива"
+              placeholder="Creative text"
               value={creativeText}
               onChange={(e) => setCreativeText(e.target.value)}
             />
@@ -584,43 +584,43 @@ export function DealDetailPage() {
             />
             {creativeMedia.length > 0 && (
               <Text type="caption1" color="secondary">
-                Файлы: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
+                Files: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
               </Text>
             )}
             {creativeUploading && (
               <Text type="caption1" color="secondary">
-                Загружаем файл...
+                Uploading file...
               </Text>
             )}
-            <Button text="Отправить креатив" type="primary" loading={submitting} onClick={submitCreative} />
+            <Button text="Submit Creative" type="primary" loading={submitting} onClick={submitCreative} />
           </div>
         </Group>
       )}
 
       {canReviewCreative && isStepVisible("review") && (
-        <Group header="Ревью креатива">
+        <Group header="Creative Review">
           <div className="flex flex-col gap-3 px-4 py-3">
             <Select options={creativeStatusOptions} value={creativeStatus} onChange={(v) => setCreativeStatus(v)} />
             <textarea
               className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
               rows={3}
-              placeholder="Комментарий для DRAFT"
+              placeholder="Comment for DRAFT"
               value={creativeComment}
               onChange={(e) => setCreativeComment(e.target.value)}
             />
             <DateTimePickerField value={creativePublishAt} onChange={setCreativePublishAt} />
-            <Button text="Отправить ревью" type="primary" loading={submitting} onClick={submitCreativeReview} />
+            <Button text="Submit Review" type="primary" loading={submitting} onClick={submitCreativeReview} />
           </div>
         </Group>
       )}
 
       {canSendBrief && isStepVisible("brief") && (
-        <Group header="Бриф рекламодателя">
+        <Group header="Advertiser Brief">
           <div className="flex flex-col gap-3 px-4 py-3">
             <textarea
               className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
               rows={4}
-              placeholder="Что нужно в посте, CTA, ограничения"
+              placeholder="Post requirements, CTA, constraints"
               value={briefText}
               onChange={(e) => setBriefText(e.target.value)}
             />
@@ -632,29 +632,29 @@ export function DealDetailPage() {
             />
             {briefMedia.length > 0 && (
               <Text type="caption1" color="secondary">
-                Файлы: {briefMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
+                Files: {briefMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
               </Text>
             )}
             {briefUploading && (
               <Text type="caption1" color="secondary">
-                Загружаем файл...
+                Uploading file...
               </Text>
             )}
-            <Button text="Отправить бриф" type="secondary" loading={submitting} onClick={submitBrief} />
+            <Button text="Submit Brief" type="secondary" loading={submitting} onClick={submitBrief} />
           </div>
         </Group>
       )}
 
       {canViewCreative && isStepVisible("view") && (
-        <Group header="Просмотр креатива">
+        <Group header="View Creative">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <Button text="Показать последний креатив" type="secondary" loading={submitting} onClick={loadCreative} />
+            <Button text="Show Latest Creative" type="secondary" loading={submitting} onClick={loadCreative} />
             {creativeData && (
               <div className="flex flex-col gap-2 rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] p-3">
-                <Text type="body">Версия: {creativeData.version}</Text>
-                <Text type="body">Статус: {creativeData.status}</Text>
+                <Text type="body">Version: {creativeData.version}</Text>
+                <Text type="body">Status: {creativeData.status}</Text>
                 <Text type="body" color="secondary">
-                  {creativeData.text || "Без текста"}
+                  {creativeData.text || "No text"}
                 </Text>
                 <Text type="caption1" color="secondary">
                   media_file_ids: {JSON.stringify(creativeData.media_file_ids ?? [])}
@@ -665,7 +665,7 @@ export function DealDetailPage() {
         </Group>
       )}
 
-      <Group header="История событий">
+      <Group header="Event History">
         <DealEventTimeline dealId={deal.id} />
       </Group>
 
@@ -673,7 +673,7 @@ export function DealDetailPage() {
         <Group>
           <div className="px-4 py-3">
             <Text type="body" color="danger">
-              Пост был изменен после публикации
+              Post was modified after publishing
             </Text>
           </div>
         </Group>
@@ -683,7 +683,7 @@ export function DealDetailPage() {
         <Group>
           <div className="px-4 py-3">
             <Text type="body" color="danger">
-              Пост был удален
+              Post was deleted
             </Text>
           </div>
         </Group>
@@ -694,7 +694,7 @@ export function DealDetailPage() {
           <Button text={cta.label} type="primary" onClick={handleCta} />
         )}
         <Button
-          text="Перейти в бота"
+          text="Open Bot"
           type="secondary"
           onClick={handleOpenBot}
         />

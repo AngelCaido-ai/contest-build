@@ -17,7 +17,7 @@ import { DateTimePickerField, localInputToIso } from "../components/DateTimePick
 
 function formatNumber(value: number | null | undefined): string {
   if (value == null) return "—";
-  return new Intl.NumberFormat("ru-RU").format(value);
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function formatMaybeJson(value: unknown): string {
@@ -63,11 +63,11 @@ export function ListingDetailPage() {
       const parsedWindow = verificationWindow.trim() ? Number(verificationWindow) : null;
       const publishAtIso = localInputToIso(publishAt);
       if (publishAt.trim() && !publishAtIso) {
-        showToast("Некорректная дата публикации", { type: "error" });
+        showToast("Invalid publish date", { type: "error" });
         return;
       }
       if ((dealPrice.trim() && Number.isNaN(parsedPrice)) || (verificationWindow.trim() && Number.isNaN(parsedWindow))) {
-        showToast("Цена и окно верификации должны быть числом", { type: "error" });
+        showToast("Price and verification window must be numbers", { type: "error" });
         return;
       }
       const deal = await apiFetch<{ id: number }>("/deals", {
@@ -96,10 +96,10 @@ export function ListingDetailPage() {
           }),
         });
       }
-      showToast("Сделка создана", { type: "success" });
+      showToast("Deal created", { type: "success" });
       navigate(`/deals/${deal.id}`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
 
@@ -109,9 +109,9 @@ export function ListingDetailPage() {
     try {
       const uploaded = await uploadMedia(file);
       setCreativeMedia((prev) => [...prev, { type: uploaded.type, file_id: uploaded.file_id }]);
-      showToast("Файл загружен", { type: "success" });
+      showToast("File uploaded", { type: "success" });
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Ошибка загрузки", { type: "error" });
+      showToast(e instanceof Error ? e.message : "Upload error", { type: "error" });
     } finally {
       setMediaUploading(false);
     }
@@ -120,8 +120,8 @@ export function ListingDetailPage() {
   if (!id || Number.isNaN(listingId)) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">Некорректный листинг</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">Invalid listing</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -137,8 +137,8 @@ export function ListingDetailPage() {
   if (error || !listing) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">{error ?? "Листинг не найден"}</Text>
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Text type="body" color="danger">{error ?? "Listing not found"}</Text>
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     );
   }
@@ -146,43 +146,43 @@ export function ListingDetailPage() {
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
-        Предпросмотр
+        Preview
       </Text>
 
-      <Group header="Канал">
+      <Group header="Channel">
         <GroupItem
-          text={channel?.title ?? (channel?.username ? `@${channel.username}` : `Канал #${listing.channel_id}`)}
+          text={channel?.title ?? (channel?.username ? `@${channel.username}` : `Channel #${listing.channel_id}`)}
           description={channel?.username ? `@${channel.username}` : "—"}
         />
       </Group>
 
-      <Group header="Статистика">
+      <Group header="Stats">
         <GroupItem
-          text="Подписчики"
+          text="Subscribers"
           after={<Text type="body">{formatNumber(stats?.subscribers ?? null)}</Text>}
         />
         <GroupItem
-          text="Просмотры на пост"
+          text="Views per post"
           after={<Text type="body">{formatNumber(stats?.views_per_post ?? null)}</Text>}
         />
         <GroupItem
-          text="Источник"
+          text="Source"
           after={<Text type="body">{stats?.source ?? "—"}</Text>}
         />
       </Group>
 
-      <Group header="Условия">
+      <Group header="Terms">
         <GroupItem
-          text="Цена (USD)"
+          text="Price (USD)"
           after={<Text type="body">{listing.price_usd != null ? `$${listing.price_usd}` : "—"}</Text>}
         />
         <GroupItem
-          text="Цена (TON)"
+          text="Price (TON)"
           after={<Text type="body">{listing.price_ton != null ? `${listing.price_ton}` : "—"}</Text>}
         />
-        <GroupItem text="Формат" after={<Text type="body">{listing.format}</Text>} />
+        <GroupItem text="Format" after={<Text type="body">{listing.format}</Text>} />
         <GroupItem
-          text="Категории"
+          text="Categories"
           after={
             <Text type="body">
               {listing.categories?.length ? listing.categories.join(", ") : "—"}
@@ -191,7 +191,7 @@ export function ListingDetailPage() {
         />
       </Group>
 
-      <Group header="Ограничения">
+      <Group header="Constraints">
         <div className="px-4 py-3">
           <Text type="body" color="secondary">
             {formatMaybeJson(listing.constraints)}
@@ -199,24 +199,24 @@ export function ListingDetailPage() {
         </div>
       </Group>
 
-      <Group header="Отклик">
+      <Group header="Response">
         <div className="flex flex-col gap-3 px-4 py-3">
           <Input
-            placeholder="Ваша цена (опционально)"
+            placeholder="Your price (optional)"
             type="text"
             value={dealPrice}
             onChange={(v) => setDealPrice(v)}
             numeric
           />
           <Input
-            placeholder="Формат"
+            placeholder="Format"
             type="text"
             value={dealFormat}
             onChange={(v) => setDealFormat(v)}
           />
           <DateTimePickerField value={publishAt} onChange={setPublishAt} />
           <Input
-            placeholder="verification_window (мин)"
+            placeholder="verification_window (min)"
             type="text"
             value={verificationWindow}
             onChange={(v) => setVerificationWindow(v)}
@@ -225,14 +225,14 @@ export function ListingDetailPage() {
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={4}
-            placeholder={"Бриф\nПример:\n- продукт\n- CTA\n- ограничения"}
+            placeholder={"Brief\nExample:\n- product\n- CTA\n- constraints"}
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
           />
           <textarea
             className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
             rows={3}
-            placeholder="Пример креатива текстом"
+            placeholder="Creative example (text)"
             value={creativeExample}
             onChange={(e) => setCreativeExample(e.target.value)}
           />
@@ -243,20 +243,20 @@ export function ListingDetailPage() {
           />
           {creativeMedia.length > 0 && (
             <Text type="caption1" color="secondary">
-              Файлы: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
+              Files: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
             </Text>
           )}
           {mediaUploading && (
             <Text type="caption1" color="secondary">
-              Загружаем файл...
+              Uploading file...
             </Text>
           )}
         </div>
       </Group>
 
       <div className="flex flex-col gap-2 pt-2">
-        <Button text="Откликнуться" type="primary" onClick={respond} />
-        <Button text="Назад" type="secondary" onClick={() => navigate(-1)} />
+        <Button text="Respond" type="primary" onClick={respond} />
+        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
       </div>
     </div>
   );

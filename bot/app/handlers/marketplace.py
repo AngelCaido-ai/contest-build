@@ -90,20 +90,20 @@ class DealListFilterState(StatesGroup):
 
 
 DEAL_STATUS_GROUPS = {
-    "all": {"label": "Все", "statuses": None},
-    "negotiating": {"label": "Переговоры", "statuses": ["NEGOTIATING", "TERMS_LOCKED"]},
-    "payment": {"label": "Оплата", "statuses": ["AWAITING_PAYMENT", "FUNDED"]},
-    "creative": {"label": "Креатив", "statuses": ["CREATIVE_DRAFT", "CREATIVE_REVIEW"]},
-    "publish": {"label": "Публикация", "statuses": ["APPROVED", "SCHEDULED", "POSTED"]},
-    "verify": {"label": "Проверка", "statuses": ["VERIFYING"]},
-    "done": {"label": "Завершенные", "statuses": ["RELEASED", "REFUNDED", "CANCELED"]},
+    "all": {"label": "All", "statuses": None},
+    "negotiating": {"label": "Negotiating", "statuses": ["NEGOTIATING", "TERMS_LOCKED"]},
+    "payment": {"label": "Payment", "statuses": ["AWAITING_PAYMENT", "FUNDED"]},
+    "creative": {"label": "Creative", "statuses": ["CREATIVE_DRAFT", "CREATIVE_REVIEW"]},
+    "publish": {"label": "Publishing", "statuses": ["APPROVED", "SCHEDULED", "POSTED"]},
+    "verify": {"label": "Verification", "statuses": ["VERIFYING"]},
+    "done": {"label": "Completed", "statuses": ["RELEASED", "REFUNDED", "CANCELED"]},
 }
 DEAL_STATUS_GROUP_ORDER = list(DEAL_STATUS_GROUPS.keys())
 DEAL_ROLE_OPTIONS = ["all", "owner", "advertiser"]
 DEAL_ROLE_LABELS = {
-    "all": "Все",
-    "owner": "Мои каналы",
-    "advertiser": "Я рекламодатель",
+    "all": "All",
+    "owner": "My channels",
+    "advertiser": "I'm advertiser",
 }
 
 
@@ -326,7 +326,7 @@ def _cycle_value(current: str, options: list[str]) -> str:
 
 
 def _deal_status_label(group: str) -> str:
-    return (DEAL_STATUS_GROUPS.get(group) or DEAL_STATUS_GROUPS["all"]).get("label") or "Все"
+    return (DEAL_STATUS_GROUPS.get(group) or DEAL_STATUS_GROUPS["all"]).get("label") or "All"
 
 
 def _deal_role_label(role: str) -> str:
@@ -334,7 +334,7 @@ def _deal_role_label(role: str) -> str:
 
 
 def _deal_channel_label(channel_id: int | None) -> str:
-    return "Все" if channel_id is None else f"#{channel_id}"
+    return "All" if channel_id is None else f"#{channel_id}"
 
 
 def _deal_statuses_for_group(group: str) -> list[str] | None:
@@ -371,8 +371,8 @@ def _items_keyboard(items: list[dict], prefix: str):
 def _flow_nav_keyboard(back_data: str | None, cancel_data: str):
     builder = InlineKeyboardBuilder()
     if back_data:
-        builder.button(text="Назад", callback_data=back_data)
-    builder.button(text="Отмена", callback_data=cancel_data)
+        builder.button(text="Back", callback_data=back_data)
+    builder.button(text="Cancel", callback_data=cancel_data)
     builder.adjust(2)
     return builder.as_markup()
 
@@ -421,16 +421,16 @@ async def _prompt_listing_channel_select(message: Message, tg_user_id: int) -> N
             continue
         label = item.get("title") or item.get("username") or item.get("tg_chat_id") or item_id
         builder.button(text=f"#{item_id} {label}", callback_data=f"{LISTING_CHANNEL_PREFIX}{item_id}")
-    builder.button(text="Ввести вручную", callback_data=LISTING_CHANNEL_MANUAL)
-    builder.button(text="Назад", callback_data=f"{FLOW_BACK_PREFIX}listing:menu")
-    builder.button(text="Отмена", callback_data=f"{FLOW_CANCEL_PREFIX}listing")
+    builder.button(text="Enter manually", callback_data=LISTING_CHANNEL_MANUAL)
+    builder.button(text="Back", callback_data=f"{FLOW_BACK_PREFIX}listing:menu")
+    builder.button(text="Cancel", callback_data=f"{FLOW_CANCEL_PREFIX}listing")
     builder.adjust(1)
-    await message.answer("Выберите канал для листинга:", reply_markup=builder.as_markup())
+    await message.answer("Select a channel for the listing:", reply_markup=builder.as_markup())
 
 
 async def _prompt_listing_channel_manual(message: Message) -> None:
     await message.answer(
-        "Введите @username, ссылку t.me/... или числовой id канала (-100...).",
+        "Enter @username, t.me/... link, or numeric channel id (-100...).",
         reply_markup=_flow_nav_keyboard(f"{FLOW_BACK_PREFIX}listing:menu", f"{FLOW_CANCEL_PREFIX}listing"),
     )
 
@@ -451,22 +451,22 @@ async def _prompt_manager_channel_select(message: Message, tg_user_id: int, flow
             continue
         label = item.get("title") or item.get("username") or item.get("tg_chat_id") or item_id
         builder.button(text=f"#{item_id} {label}", callback_data=f"{MANAGER_CHANNEL_PREFIX}{flow}:{item_id}")
-    builder.button(text="Ввести вручную", callback_data=f"{MANAGER_CHANNEL_MANUAL}:{flow}")
-    builder.button(text="Отмена", callback_data=f"{FLOW_CANCEL_PREFIX}manager")
+    builder.button(text="Enter manually", callback_data=f"{MANAGER_CHANNEL_MANUAL}:{flow}")
+    builder.button(text="Cancel", callback_data=f"{FLOW_CANCEL_PREFIX}manager")
     builder.adjust(1)
-    await message.answer("Выберите канал для менеджера:", reply_markup=builder.as_markup())
+    await message.answer("Select a channel for the manager:", reply_markup=builder.as_markup())
 
 
 async def _prompt_manager_channel_manual(message: Message) -> None:
     await message.answer(
-        "Введите @username, ссылку t.me/... или числовой id канала (-100...).",
+        "Enter @username, t.me/... link, or numeric channel id (-100...).",
         reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}manager"),
     )
 
 
 async def _prompt_manager_username(message: Message) -> None:
     await message.answer(
-        "Введите @username менеджера.",
+        "Enter manager @username.",
         reply_markup=_flow_nav_keyboard(None, f"{FLOW_CANCEL_PREFIX}manager"),
     )
 
@@ -475,7 +475,7 @@ async def _load_managers(message: Message, channel_id: int) -> list[dict] | None
     try:
         items = await api_client.list_channel_managers(message.from_user.id, channel_id)
     except Exception as exc:
-        await message.answer(f"Не удалось загрузить менеджеров: {exc}")
+        await message.answer(f"Failed to load managers: {exc}")
         return None
     return items
 
@@ -485,7 +485,7 @@ async def _send_managers(message: Message, channel_id: int) -> None:
     if items is None:
         return
     if not items:
-        await message.answer("Менеджеры не найдены.", reply_markup=_main_menu_keyboard())
+        await message.answer("No managers found.", reply_markup=_main_menu_keyboard())
         return
     lines = []
     for item in items[:10]:
@@ -499,14 +499,14 @@ async def _send_managers(message: Message, channel_id: int) -> None:
 async def _add_manager_by_username(message: Message, channel_id: int, username_raw: str) -> bool:
     username = _normalize_username(username_raw)
     if not username:
-        await message.answer("Введите корректный @username.")
+        await message.answer("Enter a valid @username.")
         return False
     try:
         await api_client.add_channel_manager(message.from_user.id, channel_id, username)
     except Exception as exc:
-        await message.answer(f"Не удалось добавить менеджера: {exc}")
+        await message.answer(f"Failed to add manager: {exc}")
         return False
-    await message.answer("Менеджер добавлен.", reply_markup=_main_menu_keyboard())
+    await message.answer("Manager added.", reply_markup=_main_menu_keyboard())
     return True
 
 
@@ -518,7 +518,7 @@ async def _prepare_remove_manager(
 ) -> None:
     username = _normalize_username(username_raw)
     if not username:
-        await message.answer("Введите корректный @username.")
+        await message.answer("Enter a valid @username.")
         return
     items = await _load_managers(message, channel_id)
     if items is None:
@@ -530,19 +530,19 @@ async def _prepare_remove_manager(
             manager = item
             break
     if not manager:
-        await message.answer("Менеджер не найден.")
+        await message.answer("Manager not found.")
         return
     manager_id = manager.get("id")
     if manager_id is None:
-        await message.answer("Менеджер не найден.")
+        await message.answer("Manager not found.")
         return
     await state.update_data(channel_id=channel_id, manager_id=manager_id, manager_username=username)
     await state.set_state(ManagerRemoveState.confirm)
     builder = InlineKeyboardBuilder()
-    builder.button(text="Удалить", callback_data=f"{MANAGER_REMOVE_CONFIRM_PREFIX}{channel_id}:{manager_id}")
-    builder.button(text="Отмена", callback_data=f"{FLOW_CANCEL_PREFIX}manager")
+    builder.button(text="Remove", callback_data=f"{MANAGER_REMOVE_CONFIRM_PREFIX}{channel_id}:{manager_id}")
+    builder.button(text="Cancel", callback_data=f"{FLOW_CANCEL_PREFIX}manager")
     builder.adjust(2)
-    await message.answer(f"Удалить менеджера @{username}?", reply_markup=builder.as_markup())
+    await message.answer(f"Remove manager @{username}?", reply_markup=builder.as_markup())
 
 
 async def _prompt_listing_price(message: Message) -> None:
@@ -595,7 +595,7 @@ async def _prompt_listing_respond_publish_at(message: Message, state: FSMContext
     kb = build_calendar_keyboard(now.year, now.month, skip_allowed=True)
     if state:
         await state.update_data(**{CAL_CONTEXT_KEY: "listing_respond", "cal_skip_allowed": True})
-    await message.answer("Выберите дату публикации:", reply_markup=kb.as_markup())
+    await message.answer("Select publish date:", reply_markup=kb.as_markup())
 
 
 async def _prompt_listing_respond_creative(message: Message) -> None:
@@ -668,11 +668,11 @@ def _deal_quick_action(item: dict, role: str) -> tuple[str, str] | None:
     if not deal_id:
         return None
     if role == ROLE_ADVERTISER and status in {"TERMS_LOCKED", "AWAITING_PAYMENT"}:
-        return ("Оплата", f"{DEAL_PAYMENT_PREFIX}{deal_id}")
+        return ("Payment", f"{DEAL_PAYMENT_PREFIX}{deal_id}")
     if role == ROLE_OWNER and status in {"NEGOTIATING", "TERMS_LOCKED"}:
-        return ("Условия", f"{DEAL_TERMS_PREFIX}{deal_id}")
+        return ("Terms", f"{DEAL_TERMS_PREFIX}{deal_id}")
     if role == ROLE_OWNER and status in {"FUNDED", "CREATIVE_DRAFT"}:
-        return ("Креатив", f"{DEAL_CREATIVE_PREFIX}{deal_id}")
+        return ("Creative", f"{DEAL_CREATIVE_PREFIX}{deal_id}")
     return None
 
 
@@ -703,7 +703,7 @@ def _deals_keyboard(
         label = f"#{deal_id}"
         if active_id == deal_id:
             label = f"{label} [active]"
-        row = [InlineKeyboardButton(text=f"Открыть {label}", callback_data=f"{DEAL_PREFIX}{deal_id}")]
+        row = [InlineKeyboardButton(text=f"Open {label}", callback_data=f"{DEAL_PREFIX}{deal_id}")]
         role = roles_by_id.get(deal_id, "advertiser")
         quick_action = _deal_quick_action(item, role)
         if quick_action:
@@ -711,22 +711,22 @@ def _deals_keyboard(
         builder.row(*row)
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="Назад", callback_data=f"{DEALS_PAGE_PREFIX}{page - 1}"))
+        nav_buttons.append(InlineKeyboardButton(text="Prev", callback_data=f"{DEALS_PAGE_PREFIX}{page - 1}"))
     if has_more:
-        nav_buttons.append(InlineKeyboardButton(text="Вперёд", callback_data=f"{DEALS_PAGE_PREFIX}{page + 1}"))
+        nav_buttons.append(InlineKeyboardButton(text="Next", callback_data=f"{DEALS_PAGE_PREFIX}{page + 1}"))
     if nav_buttons:
         builder.row(*nav_buttons)
     builder.row(
-        InlineKeyboardButton(text=f"Статус: {status_label}", callback_data=f"{DEALS_STATUS_PREFIX}{next_status}"),
-        InlineKeyboardButton(text=f"Роль: {role_label}", callback_data=f"{DEALS_ROLE_PREFIX}{next_role}"),
+        InlineKeyboardButton(text=f"Status: {status_label}", callback_data=f"{DEALS_STATUS_PREFIX}{next_status}"),
+        InlineKeyboardButton(text=f"Role: {role_label}", callback_data=f"{DEALS_ROLE_PREFIX}{next_role}"),
     )
     builder.row(
-        InlineKeyboardButton(text=f"Канал: {channel_label}", callback_data=DEALS_CHANNEL_PREFIX),
-        InlineKeyboardButton(text="Сбросить", callback_data=DEALS_CLEAR_PREFIX),
+        InlineKeyboardButton(text=f"Channel: {channel_label}", callback_data=DEALS_CHANNEL_PREFIX),
+        InlineKeyboardButton(text="Reset", callback_data=DEALS_CLEAR_PREFIX),
     )
     if active_id:
-        builder.row(InlineKeyboardButton(text="Снять активную", callback_data=DEALS_ACTIVE_CLEAR_PREFIX))
-    builder.row(InlineKeyboardButton(text="Меню", callback_data=MENU_MAIN))
+        builder.row(InlineKeyboardButton(text="Clear active", callback_data=DEALS_ACTIVE_CLEAR_PREFIX))
+    builder.row(InlineKeyboardButton(text="Menu", callback_data=MENU_MAIN))
     return builder.as_markup()
 
 
@@ -778,13 +778,13 @@ async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | Non
     active_id = data.get(ACTIVE_DEAL_KEY)
     lines = []
     if active_id:
-        lines.append(f"Активная сделка: #{active_id}")
+        lines.append(f"Active deal: #{active_id}")
     status_label = _deal_status_label(status_group)
     role_label = _deal_role_label(role_filter)
     channel_label = _deal_channel_label(channel_id)
-    lines.append(f"Фильтры: статус={status_label} роль={role_label} канал={channel_label}")
+    lines.append(f"Filters: status={status_label} role={role_label} channel={channel_label}")
     if page > 0 or has_more:
-        lines.append(f"Страница: {page + 1}")
+        lines.append(f"Page: {page + 1}")
     from bot.app.handlers.deals import _next_step_for_role
     for item in items:
         deal_id = item.get("id")
@@ -1100,7 +1100,7 @@ async def deals_channel_filter(callback: CallbackQuery, state: FSMContext) -> No
         await callback.answer()
         return
     await state.set_state(DealListFilterState.channel_id)
-    await callback.message.answer("Введите channel_id для фильтра или 0 чтобы сбросить.")
+    await callback.message.answer("Enter channel_id for filter or 0 to reset.")
     await callback.answer()
 
 
@@ -1122,7 +1122,7 @@ async def deals_active_clear(callback: CallbackQuery, state: FSMContext) -> None
     from bot.app.handlers.deals import _clear_active_deal
 
     await _clear_active_deal(callback.message, state)
-    await callback.message.answer("Активная сделка снята.")
+    await callback.message.answer("Active deal cleared.")
     await _send_deals(callback.message, state, callback.from_user.id)
     await callback.answer()
 
@@ -1296,12 +1296,12 @@ async def manager_remove_confirm(callback: CallbackQuery, state: FSMContext) -> 
     try:
         await api_client.remove_channel_manager(callback.from_user.id, channel_id, manager_id)
     except Exception as exc:
-        await callback.message.answer(f"Не удалось удалить менеджера: {exc}")
+        await callback.message.answer(f"Failed to remove manager: {exc}")
         await callback.answer()
         return
     if await state.get_state():
         await _clear_state_keep(state)
-    await callback.message.answer("Менеджер удален.", reply_markup=_main_menu_keyboard())
+    await callback.message.answer("Manager removed.", reply_markup=_main_menu_keyboard())
     await callback.answer()
 
 
@@ -1486,7 +1486,7 @@ async def manager_add_username(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     channel_id = data.get("channel_id")
     if channel_id is None:
-        await message.answer("Канал не найден.", reply_markup=_main_menu_keyboard())
+        await message.answer("Channel not found.", reply_markup=_main_menu_keyboard())
         await _clear_state_keep(state)
         return
     added = await _add_manager_by_username(message, int(channel_id), message.text or "")
@@ -1520,7 +1520,7 @@ async def manager_remove_username(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     channel_id = data.get("channel_id")
     if channel_id is None:
-        await message.answer("Канал не найден.", reply_markup=_main_menu_keyboard())
+        await message.answer("Channel not found.", reply_markup=_main_menu_keyboard())
         await _clear_state_keep(state)
         return
     await _prepare_remove_manager(message, state, int(channel_id), message.text or "")
@@ -1530,10 +1530,10 @@ async def manager_remove_username(message: Message, state: FSMContext) -> None:
 async def deal_filter_channel_id(message: Message, state: FSMContext) -> None:
     value = (message.text or "").strip()
     if not value:
-        await message.answer("Введите channel_id или 0 чтобы сбросить.")
+        await message.answer("Enter channel_id or 0 to reset.")
         return
     if not value.isdigit():
-        await message.answer("Channel_id должен быть числом.")
+        await message.answer("Channel_id must be a number.")
         return
     channel_value = int(value)
     channel_id = None if channel_value == 0 else channel_value
@@ -1606,7 +1606,7 @@ async def listing_respond_publish_at(message: Message, state: FSMContext) -> Non
                 except ValueError:
                     pass
         if not parsed:
-            await message.answer("Неверный формат. Используйте календарь или введите: 15.02 18:30")
+            await message.answer("Invalid format. Use the calendar or enter: 15.02 18:30")
             return
         await state.update_data(publish_at=parsed)
     await state.set_state(ListingRespondState.creative)
