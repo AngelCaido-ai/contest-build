@@ -65,6 +65,7 @@ backend/
 │   │   ├── request.py
 │   │   └── user.py
 │   ├── services/
+│   │   ├── deal_actions.py        # Shared бизнес-логика сделок (constants, helpers, do_* операции)
 │   │   ├── deal_service.py        # Переходы статусов, логирование событий
 │   │   ├── escrow_service.py      # Создание депозита, подтверждение, release, refund
 │   │   ├── stats_service.py       # MTProto + Bot API (fallback) статистика
@@ -79,6 +80,7 @@ backend/
 ├── scripts/
 │   └── check_migrations_and_crud.py
 └── tests/
+    ├── test_deal_service.py
     ├── test_escrow_service.py
     ├── test_refund_api.py
     ├── test_ton_escrow.py
@@ -97,8 +99,8 @@ backend/
 | `DATABASE_URL` | `str` | `postgresql+psycopg2://...` | Строка подключения к PostgreSQL |
 | `REDIS_URL` | `str` | `redis://localhost:6379/0` | Строка подключения к Redis |
 | `BOT_TOKEN` | `str` | `""` | Токен Telegram-бота |
-| `BOT_SECRET` | `str` | `""` | Shared secret для авторизации бота |
-| `JWT_SECRET` | `str` | `change_me` | Секрет для JWT-токенов |
+| `BOT_SECRET` | `str` | **обязательный** | Shared secret для авторизации бота |
+| `JWT_SECRET` | `str` | **обязательный, min 32 символа** | Секрет для JWT-токенов |
 | `JWT_TTL_MINUTES` | `int` | `1440` | Время жизни JWT (24 часа) |
 | `TELETHON_API_ID` | `int?` | `None` | API ID для MTProto (Telethon) |
 | `TELETHON_API_HASH` | `str?` | `None` | API Hash для MTProto |
@@ -121,6 +123,7 @@ backend/
 | `SWEEP_MIN_BALANCE_TON` | `float` | `0.005` | Минимальный баланс для sweep (если меньше — комиссия съест всё) |
 | `RATE_LIMIT_ESCROW_DEPOSIT` | `str` | `10/minute` | Лимит для `POST /escrow/deals/{id}/deposit` (ключ `user_id` из JWT) |
 | `RATE_LIMIT_ESCROW_BOT` | `str` | `20/minute` | Лимит для escrow bot-only эндпоинтов и `POST /bot/deals/{id}/deposit` (ключ IP) |
+| `INIT_DATA_MAX_AGE_SECONDS` | `int` | `300` | Максимальный возраст `auth_date` в Telegram `init_data` (защита от replay attack) |
 
 ---
 
@@ -145,6 +148,19 @@ backend/
 ### Защита эндпоинтов бота
 
 Все роуты `/bot/*` защищены зависимостью `get_bot_secret` — проверка заголовка `X-Bot-Secret`.
+
+### Защита от replay attack (auth_date)
+
+`verify_init_data` после проверки HMAC-подписи валидирует поле `auth_date` из `init_data`:
+- Если `auth_date` отсутствует или не является числом — данные отклоняются.
+- Если разница между текущим временем и `auth_date` превышает `INIT_DATA_MAX_AGE_SECONDS` (по умолчанию 300 сек / 5 мин) — данные отклоняются.
+- Перехваченная строка `init_data` не может быть переиспользована после истечения окна.
+
+### Timing-safe сравнение секретов
+
+Все сравнения секретных значений выполняются через `hmac.compare_digest()` (constant-time), что исключает timing attack:
+- `deps.py` — сравнение `X-Bot-Secret` с `settings.bot_secret`
+- `security.py` — сравнение вычисленного HMAC с `received_hash` при валидации Telegram `init_data`
 
 ### Rate limiting финансовых эндпоинтов
 
@@ -319,18 +335,23 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 ### Допустимые переходы
 
+`set_status` enforce'ит эту таблицу — при недопустимом переходе бросает `InvalidTransitionError`.
+
 | Из | В |
 |---|---|
 | `NEGOTIATING` | `TERMS_LOCKED`, `CANCELED` |
-| `TERMS_LOCKED` | `AWAITING_PAYMENT`, `CREATIVE_DRAFT`, `CANCELED` |
+| `TERMS_LOCKED` | `TERMS_LOCKED`, `AWAITING_PAYMENT`, `CREATIVE_DRAFT`, `CANCELED` |
 | `AWAITING_PAYMENT` | `FUNDED`, `CANCELED` |
-| `FUNDED` | `CREATIVE_DRAFT`, `CANCELED` |
+| `FUNDED` | `CREATIVE_DRAFT`, `CREATIVE_REVIEW`, `CANCELED`, `REFUNDED` |
 | `CREATIVE_DRAFT` | `CREATIVE_REVIEW`, `CANCELED` |
-| `CREATIVE_REVIEW` | `APPROVED`, `CANCELED` |
-| `APPROVED` | `SCHEDULED`, `CANCELED` |
-| `SCHEDULED` | `POSTED`, `CANCELED` |
+| `CREATIVE_REVIEW` | `APPROVED`, `CREATIVE_DRAFT`, `CREATIVE_REVIEW`, `CANCELED` |
+| `APPROVED` | `SCHEDULED`, `POSTED`, `VERIFYING`, `CANCELED` |
+| `SCHEDULED` | `POSTED`, `VERIFYING`, `CANCELED` |
 | `POSTED` | `VERIFYING` |
 | `VERIFYING` | `RELEASED`, `REFUNDED` |
+| `RELEASED` | — (terminal) |
+| `REFUNDED` | — (terminal) |
+| `CANCELED` | — (terminal) |
 
 ### Роли и разрешённые переходы
 
@@ -377,8 +398,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/listings/` | Создать листинг | JWT (owner) |
-| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT при `exclude_own=true` |
-| `GET` | `/listings/{id}` | Получить листинг (включает preview канала и статистику, если есть) | — |
+| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT |
+| `GET` | `/listings/{id}` | Получить листинг (включает preview канала и статистику, если есть) | JWT |
 | `PATCH` | `/listings/{id}` | Обновить листинг | JWT (owner) |
 
 `GET /listings/{id}` дополнительно возвращает объект `channel` (id, username, title, stats) для предпросмотра в Mini App.
@@ -388,8 +409,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/requests/` | Создать заявку | JWT |
-| `GET` | `/requests/` | Список заявок (фильтры: `budget_min`, `budget_max`) | — |
-| `GET` | `/requests/{id}` | Получить заявку | — |
+| `GET` | `/requests/` | Список заявок (фильтры: `budget_min`, `budget_max`) | JWT |
+| `GET` | `/requests/{id}` | Получить заявку | JWT |
 | `PATCH` | `/requests/{id}` | Обновить заявку | JWT (advertiser) |
 
 ### Deals (`/deals`)
@@ -442,7 +463,11 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/bot/channels` | Создать/обновить канал |
 | `GET` | `/bot/channels` | Список каналов пользователя (по `tg_user_id`) |
 | `POST` | `/bot/listings` | Создать листинг (требуется `linked_wallet`, иначе 400) |
+| `GET` | `/bot/listings` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`) |
+| `GET` | `/bot/listings/{id}` | Получить листинг |
 | `POST` | `/bot/requests` | Создать заявку |
+| `GET` | `/bot/requests` | Список заявок (фильтры: `budget_min`, `budget_max`) |
+| `GET` | `/bot/requests/{id}` | Получить заявку |
 | `POST` | `/bot/deals` | Создать сделку; 409 если по листингу уже есть активная сделка |
 | `GET` | `/bot/deals` | Список сделок (фильтры: `tg_user_id`, `statuses`, `role`, `channel_id`, `limit`, `offset`, `order_by`) |
 | `GET` | `/bot/deals/{id}` | Получить сделку |
@@ -464,10 +489,39 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 ## Сервисы
 
+### deal_actions.py
+
+Shared service layer для бизнес-логики сделок. Извлечён из `deals.py` и `bot_actions.py` для устранения дублирования (~750 строк). Route handlers делегируют в `do_*` функции, которые принимают `user_id: int` (не `User` и не `tg_user_id`), бросают `ValueError` при доменных ошибках и `InvalidTransitionError` при недопустимых переходах статуса.
+
+**Константы:**
+- `ROLE_OWNER`, `ROLE_ADVERTISER` — строковые идентификаторы ролей
+- `ROLE_ALLOWED_STATUSES` — какие статусы может устанавливать каждая роль
+- `FINAL_DEAL_STATUSES` — терминальные статусы (`RELEASED`, `REFUNDED`, `CANCELED`)
+
+**Helpers:**
+- `get_deal_role_flags(db, deal, user_id)` → `(is_owner, is_advertiser)` — определение роли по `user_id`; raises `ValueError("channel_not_found")`, `ValueError("not_deal_participant")`
+- `get_deal_role(db, deal, user_id)` → `str` — возвращает `ROLE_OWNER` или `ROLE_ADVERTISER`
+- `next_step_for_role(status, role)` → подсказка следующего шага для уведомлений
+- `format_deal_terms(deal)` → форматирование условий сделки
+- `deal_action_keyboard(deal, role)` → inline-клавиатура для Telegram-уведомлений
+- `send_deal_notification(deal, user, role, text)` → отправка уведомления с подсказкой и клавиатурой
+- `notify_deal_parties(db, deal, text)` → уведомление обеих сторон
+- `send_creative_to_advertiser(deal, creative, advertiser)` → отправка креатива рекламодателю
+
+**Бизнес-операции:**
+- `do_update_terms(db, deal_id, actor_user_id, fields)` → `Deal` — фиксация условий
+- `do_update_publish_at(db, deal_id, actor_user_id, publish_at)` → `Deal` — установка даты публикации
+- `do_update_status(db, deal_id, actor_user_id, new_status)` → `Deal` — изменение статуса
+- `do_create_creative(db, deal_id, actor_user_id, text, media_file_ids)` → `Creative` — создание креатива
+- `do_get_creative(db, deal_id, actor_user_id, version)` → `Creative` — получение креатива
+- `do_update_creative_status(db, deal_id, actor_user_id, new_status, comment, publish_at)` → `Creative` — ревью креатива
+- `do_add_advertiser_brief(db, deal_id, actor_user_id, text, media_file_ids, publish_at)` → `DealEvent` — бриф рекламодателя
+
 ### deal_service.py
 
-- `can_transition(current, new_status)` — проверка допустимости перехода
-- `set_status(deal, new_status)` — установка нового статуса (с логированием)
+- `InvalidTransitionError(ValueError)` — исключение при недопустимом переходе статуса; содержит `deal_id`, `current`, `target`
+- `can_transition(current, new_status)` — проверка допустимости перехода (для UI hints)
+- `set_status(deal, new_status)` — установка нового статуса с enforce'ом допустимых переходов; бросает `InvalidTransitionError` при переходе, отсутствующем в `ALLOWED_TRANSITIONS`
 - `log_event(db, deal_id, type, payload)` — запись DealEvent
 
 ### escrow_service.py
@@ -479,12 +533,15 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 - `refund_payment(db, deal, refund_address, reason)` — возврат средств рекламодателю, переход в `REFUNDED`
 - `sweep_deposit(db, deal, payment)` — возврат остатка (reserve) с deposit-кошелька рекламодателю (mode 128)
 
+**Защита от race condition (пессимистичная блокировка):**
+Все финансовые операции (`confirm_payment`, `release_payment`, `refund_payment`, `sweep_deposit`) выполняют `SELECT ... FOR UPDATE` на строках `Deal` и `EscrowPayment` перед проверкой идемпотентности. Это предотвращает двойную отправку TON при конкурентных запросах от нескольких worker/API-запросов. `scan_incoming_payments` блокирует строку только после обнаружения транзакции в блокчейне, чтобы не держать lock на время HTTP-запроса. `create_deposit_address` в routes/escrow.py аналогично блокирует строку Deal перед проверкой существующего payment. Фоновые задачи `check_verification_windows` и `sweep_completed_deposits` перечитывают deal+payment с блокировкой в цикле перед вызовом финансовых функций.
+
 ### ton_escrow.py
 
 Интеграция с блокчейном TON через toncenter API (v2 + v3):
 
 - `create_deposit_wallet(deal_id)` — генерация нового TON-кошелька (v4r2)
-- `encrypt_deposit_key(key)` / `decrypt_deposit_key(value)` — AES-GCM шифрование мнемоники
+- `encrypt_deposit_key(key)` / `decrypt_deposit_key(value)` — AES-GCM шифрование мнемоники; `decrypt_deposit_key` бросает `ValueError` при любой ошибке дешифровки (невалидные данные, неверный ключ, повреждённый blob)
 - `build_deposit_comment(deal_id)` — формирование комментария `deal:<id>`
 - `find_incoming_tx(address, amount, comment)` — поиск входящей транзакции по адресу/сумме/комментарию
 - `send_payout(key, address, amount)` — отправка TON на адрес выплаты
@@ -541,11 +598,25 @@ RQ worker (`SimpleWorker` с `TimerDeathPenalty` для Windows). Подключ
 
 ### `worker/scheduler.py`
 
-Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд. Каждый `enqueue()` обёрнут в `try/except` — сбой одной задачи или временная недоступность Redis не останавливает остальные.
+Бесконечный цикл, ставит 6 задач в очередь каждые 20 секунд с дедупликацией:
+
+- Каждая задача ставится с `job_id=task.__name__` — в Redis максимум 1 job на тип задачи.
+- Перед `enqueue` проверяется статус существующего job через `Job.fetch()`: если `queued`, `started` или `scheduled` — enqueue пропускается (лог на уровне DEBUG).
+- `result_ttl=0` — результаты завершённых job не хранятся в Redis (задачи ничего не возвращают).
+- `job_timeout` — зависшая задача убивается worker-ом, job_id освобождается для следующего цикла.
+
+| Задача | `job_timeout` (сек) | Причина |
+|---|---|---|
+| `scan_escrow_deposits` | 120 | HTTP к TonCenter, сканирование платежей |
+| `check_verification_windows` | 120 | HTTP к TonCenter, release/refund |
+| `sweep_completed_deposits` | 120 | HTTP к TonCenter, sweep транзакции |
+| `process_scheduled_posts` | 60 | Telegram API |
+| `check_deleted_posts` | 60 | Telegram API |
+| `check_payment_timeouts` | 30 | Только DB-операции |
 
 ```
-check_payment_timeouts → scan_escrow_deposits → process_scheduled_posts →
-check_deleted_posts → check_verification_windows → sweep_completed_deposits → sleep(20) → повтор
+scan_escrow_deposits → check_verification_windows → sweep_completed_deposits →
+process_scheduled_posts → check_deleted_posts → check_payment_timeouts → sleep(20) → повтор
 ```
 
 > Tamper detection выполняется отдельным watcher-ботом (см. `docs/watcher.md`).

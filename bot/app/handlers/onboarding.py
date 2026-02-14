@@ -51,7 +51,7 @@ async def add_channel(message: Message, bot: Bot) -> None:
         },
     }
     try:
-        result = api_client.create_channel(payload)
+        result = await api_client.create_channel(payload)
         logger.info("add_channel: success chat_id=%s result=%s", chat.id, result.get("status"))
         await message.answer(f"Channel linked: {result.get('status')}")
     except Exception:

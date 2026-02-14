@@ -19,7 +19,9 @@ from app.core.config import settings
 from app.db.base import Base
 from app.main import app
 from app.models.deal import Deal
+from app.models.enums import DealStatus
 from app.models.escrow_payment import EscrowPayment
+from app.services.deal_service import set_status
 from app.services.escrow_service import confirm_payment, refund_payment, release_payment
 from app.services import ton_escrow
 
@@ -41,7 +43,7 @@ class RefundApiTests(unittest.TestCase):
         self._prev_wallet_subwallet = settings.ton_wallet_subwallet
         self._prev_limiter_enabled = app.state.limiter.enabled
         settings.bot_secret = "test-bot-secret"
-        settings.jwt_secret = "test-jwt-secret"
+        settings.jwt_secret = "test-jwt-secret-that-is-at-least-32-chars-long"
         settings.escrow_secret_key = base64.urlsafe_b64encode(b"0" * 32).decode()
         app.state.limiter.enabled = False
 
@@ -302,6 +304,10 @@ class RefundApiTests(unittest.TestCase):
         try:
             deal = db.get(Deal, deal_id)
             self.assertEqual(deal.status.value, "FUNDED")
+            set_status(deal, DealStatus.CREATIVE_REVIEW)
+            set_status(deal, DealStatus.APPROVED)
+            set_status(deal, DealStatus.VERIFYING)
+            db.commit()
             with patch("app.services.ton_escrow.send_payout", return_value="payout_tx") as mock_send:
                 payment = release_payment(db, deal, VALID_TON_ADDRESS)
             self.assertEqual(payment.release_tx_hash, "payout_tx")
@@ -805,6 +811,10 @@ class RefundApiTests(unittest.TestCase):
             deal = db.get(Deal, deal_id)
             payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
             confirm_payment(db, deal, payment, deposit_tx)
+            set_status(deal, DealStatus.CREATIVE_REVIEW)
+            set_status(deal, DealStatus.APPROVED)
+            set_status(deal, DealStatus.VERIFYING)
+            db.commit()
 
             result = release_payment(db, deal, payout_address)
             self.assertTrue(result.release_tx_hash)

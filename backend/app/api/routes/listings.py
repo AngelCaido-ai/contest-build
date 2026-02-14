@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, get_optional_current_user
+from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
 from app.models.channel_stats import ChannelStats
 from app.models.listing import Listing
@@ -59,7 +59,7 @@ def list_listings(
     channel_id: int | None = Query(default=None),
     exclude_own: bool = Query(default=False),
     db: Session = Depends(get_db),
-    user=Depends(get_optional_current_user),
+    user=Depends(get_current_user),
 ) -> list[ListingOut]:
     query = db.query(Listing)
     if active is not None:
@@ -71,8 +71,6 @@ def list_listings(
     if price_max is not None:
         query = query.filter(Listing.price_usd <= price_max)
     if exclude_own:
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         own_channel_ids = db.query(Channel.id).filter(Channel.owner_user_id == user.id)
         query = query.filter(~Listing.channel_id.in_(own_channel_ids))
     items = query.all()
@@ -80,7 +78,7 @@ def list_listings(
 
 
 @router.get("/{listing_id}", response_model=ListingDetailOut)
-def get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingDetailOut:
+def get_listing(listing_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)) -> ListingDetailOut:
     listing = db.get(Listing, listing_id)
     if not listing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

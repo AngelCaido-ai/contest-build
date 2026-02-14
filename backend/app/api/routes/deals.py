@@ -8,11 +8,9 @@ from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
 from app.models.channel_manager import ChannelManager
 from app.models.channel_stats import ChannelStats
-from app.models.creative import Creative
 from app.models.deal import Deal
 from app.models.deal_event import DealEvent
-from app.models.escrow_payment import EscrowPayment
-from app.models.enums import CreativeStatus, DealStatus
+from app.models.enums import DealStatus
 from app.models.listing import Listing
 from app.models.request import Request
 from app.models.user import User
@@ -29,131 +27,41 @@ from app.schemas.deal import (
     DealTermsUpdate,
 )
 from app.schemas.event import DealEventOut
-from app.services.deal_service import can_transition, log_event, set_status
-from app.services.escrow_service import create_deposit
-from app.services.telegram_service import send_media, send_message, upload_media_for_user
+from app.services.deal_actions import (
+    FINAL_DEAL_STATUSES,
+    do_add_advertiser_brief,
+    do_create_creative,
+    do_get_creative,
+    do_update_creative_status,
+    do_update_publish_at,
+    do_update_status,
+    do_update_terms,
+    get_deal_role_flags,
+)
+from app.services.deal_service import InvalidTransitionError, log_event
+from app.services.telegram_service import upload_media_for_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-ROLE_OWNER = "owner"
-ROLE_ADVERTISER = "advertiser"
 
-ROLE_ALLOWED_STATUSES: dict[str, set[DealStatus]] = {
-    ROLE_OWNER: {
-        DealStatus.TERMS_LOCKED,
-        DealStatus.CANCELED,
-        DealStatus.SCHEDULED,
-        DealStatus.POSTED,
-        DealStatus.VERIFYING,
-        DealStatus.RELEASED,
-        DealStatus.REFUNDED,
-    },
-    ROLE_ADVERTISER: {
-        DealStatus.AWAITING_PAYMENT,
-        DealStatus.FUNDED,
-        DealStatus.CANCELED,
-    },
+_ERROR_MAP = {
+    "deal_not_found": (status.HTTP_404_NOT_FOUND, None),
+    "channel_not_found": (status.HTTP_404_NOT_FOUND, None),
+    "creative_not_found": (status.HTTP_404_NOT_FOUND, None),
+    "not_deal_participant": (status.HTTP_403_FORBIDDEN, None),
+    "forbidden": (status.HTTP_403_FORBIDDEN, None),
+    "invalid_status": (status.HTTP_400_BAD_REQUEST, None),
+    "empty_creative": (status.HTTP_400_BAD_REQUEST, None),
+    "empty_brief": (status.HTTP_400_BAD_REQUEST, None),
+    "comment_required": (status.HTTP_400_BAD_REQUEST, "Comment is required for draft"),
+    "publish_at_required": (status.HTTP_400_BAD_REQUEST, "publish_at is required for approval"),
 }
 
 
-def _get_deal_role_flags(db: Session, deal: Deal, user: User) -> tuple[bool, bool]:
-    channel = db.get(Channel, deal.channel_id)
-    if not channel:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    is_owner = channel.owner_user_id == user.id
-    if not is_owner:
-        manager = (
-            db.query(ChannelManager)
-            .filter(ChannelManager.channel_id == channel.id, ChannelManager.user_id == user.id)
-            .first()
-        )
-        is_owner = bool(manager)
-    is_advertiser = deal.advertiser_id == user.id
-    if not is_owner and not is_advertiser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return is_owner, is_advertiser
-
-
-def _get_deal_role(db: Session, deal: Deal, user: User) -> str:
-    is_owner, _ = _get_deal_role_flags(db, deal, user)
-    if is_owner:
-        return ROLE_OWNER
-    return ROLE_ADVERTISER
-
-
-def _next_step_for_role(status_value: DealStatus, role: str) -> str | None:
-    if status_value == DealStatus.NEGOTIATING:
-        return "Lock terms or cancel the deal." if role == ROLE_OWNER else "Wait for owner to lock terms."
-    if status_value == DealStatus.TERMS_LOCKED:
-        return "Wait for payment." if role == ROLE_OWNER else "Pay escrow (open Payment details)."
-    if status_value == DealStatus.AWAITING_PAYMENT:
-        return "Wait for payment." if role == ROLE_OWNER else "Send payment to escrow."
-    if status_value == DealStatus.FUNDED:
-        return "Create and submit creative." if role == ROLE_OWNER else "Wait for creative."
-    if status_value == DealStatus.CREATIVE_DRAFT:
-        return "Update creative and submit for review." if role == ROLE_OWNER else "Wait for creative."
-    if status_value == DealStatus.CREATIVE_REVIEW:
-        return "Review creative and approve/request edits." if role == ROLE_ADVERTISER else "Waiting for review."
-    if status_value == DealStatus.APPROVED:
-        return "Schedule the post." if role == ROLE_OWNER else "Waiting for schedule."
-    if status_value == DealStatus.SCHEDULED:
-        return "Post at scheduled time." if role == ROLE_OWNER else "Waiting for post."
-    if status_value == DealStatus.POSTED:
-        return "Start verification." if role == ROLE_OWNER else "Waiting for verification."
-    if status_value == DealStatus.VERIFYING:
-        return "Release or refund after verification window." if role == ROLE_OWNER else "Waiting for release/refund."
-    return None
-
-
-def _deal_action_keyboard(deal: Deal, role: str) -> dict | None:
-    buttons = [[{"text": "Open deal", "callback_data": f"deal:{deal.id}"}]]
-    if role == ROLE_ADVERTISER and deal.status in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:
-        buttons.append([{"text": "Payment details", "callback_data": f"deal_payment:{deal.id}"}])
-    return {"inline_keyboard": buttons}
-
-
-def _send_deal_notification(deal: Deal, user: User, role: str, text: str) -> None:
-    if not user.tg_user_id:
-        return
-    next_step = _next_step_for_role(deal.status, role)
-    message = text
-    if next_step:
-        message = f"{message}\nNext step: {next_step}"
-    reply_markup = _deal_action_keyboard(deal, role)
-    send_message(int(user.tg_user_id), message, reply_markup=reply_markup)
-
-
-def _notify_deal_parties(db: Session, deal: Deal, text: str) -> None:
-    advertiser = db.get(User, deal.advertiser_id)
-    channel = db.get(Channel, deal.channel_id)
-    owner = db.get(User, channel.owner_user_id) if channel else None
-    if advertiser:
-        _send_deal_notification(deal, advertiser, ROLE_ADVERTISER, text)
-    if owner:
-        _send_deal_notification(deal, owner, ROLE_OWNER, text)
-
-
-def _send_creative_to_advertiser(deal: Deal, creative: Creative, advertiser: User | None) -> None:
-    if not advertiser or not advertiser.tg_user_id:
-        return
-    send_media(int(advertiser.tg_user_id), creative.text, creative.media_file_ids)
-
-
-def _format_deal_terms(deal: Deal) -> str:
-    lines = []
-    if deal.price is not None:
-        lines.append(f"price: {deal.price}")
-    if deal.format:
-        lines.append(f"format: {deal.format}")
-    if deal.publish_at:
-        lines.append(f"publish_at: {deal.publish_at.isoformat()}")
-    if deal.verification_window:
-        lines.append(f"verification_window: {deal.verification_window}")
-    if deal.brief:
-        lines.append(f"brief: {deal.brief}")
-    if not lines:
-        return "terms: -"
-    return "terms:\n" + "\n".join(lines)
+def _handle_domain_error(exc: ValueError) -> HTTPException:
+    key = str(exc)
+    code, detail = _ERROR_MAP.get(key, (status.HTTP_400_BAD_REQUEST, key))
+    return HTTPException(status_code=code, detail=detail)
 
 
 @router.post("/", response_model=DealOut)
@@ -164,14 +72,13 @@ def create_deal(
 ) -> DealOut:
     if not payload.listing_id and not payload.request_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    FINAL_STATUSES = {DealStatus.CANCELED, DealStatus.RELEASED, DealStatus.REFUNDED}
     if payload.listing_id:
         listing = db.get(Listing, payload.listing_id)
         if not listing:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         active_deal = (
             db.query(Deal)
-            .filter(Deal.listing_id == listing.id, ~Deal.status.in_(FINAL_STATUSES))
+            .filter(Deal.listing_id == listing.id, ~Deal.status.in_(FINAL_DEAL_STATUSES))
             .first()
         )
         if active_deal:
@@ -247,7 +154,10 @@ def get_deal(
     deal = db.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    _get_deal_role_flags(db, deal, user)
+    try:
+        get_deal_role_flags(db, deal, user.id)
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
     channel = db.get(Channel, deal.channel_id)
 
     stats = db.query(ChannelStats).filter(ChannelStats.channel_id == deal.channel_id).first()
@@ -291,7 +201,10 @@ def list_deal_events(
     deal = db.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    _get_deal_role_flags(db, deal, user)
+    try:
+        get_deal_role_flags(db, deal, user.id)
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
     events = (
         db.query(DealEvent)
         .filter(DealEvent.deal_id == deal.id)
@@ -308,38 +221,15 @@ def update_terms(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> DealOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    role = _get_deal_role(db, deal, user)
-    if role != ROLE_OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if deal.status not in {DealStatus.NEGOTIATING, DealStatus.TERMS_LOCKED}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    update_data = payload.model_dump(exclude_unset=True)
-    update_data.pop("actor_tg_user_id", None)
-    log_payload = payload.model_dump(exclude_unset=True, mode="json")
-    log_payload.pop("actor_tg_user_id", None)
-    for key, value in update_data.items():
-        setattr(deal, key, value)
-    set_status(deal, DealStatus.TERMS_LOCKED)
-    log_event(db, deal.id, "TERMS_LOCKED", log_payload)
-    db.commit()
-    db.refresh(deal)
-    advertiser = db.get(User, deal.advertiser_id)
-    channel = db.get(Channel, deal.channel_id)
-    owner = db.get(User, channel.owner_user_id) if channel else None
-    if owner:
-        _send_deal_notification(deal, owner, ROLE_OWNER, f"Deal #{deal.id}: terms locked.")
-    if advertiser:
-        terms_text = _format_deal_terms(deal)
-        _send_deal_notification(
-            deal,
-            advertiser,
-            ROLE_ADVERTISER,
-            f"Deal #{deal.id}: terms locked.\n\n{terms_text}",
-        )
-    return DealOut.model_validate(deal)
+    fields = payload.model_dump(exclude_unset=True)
+    fields.pop("actor_tg_user_id", None)
+    try:
+        deal = do_update_terms(db, deal_id, user.id, fields)
+        return DealOut.model_validate(deal)
+    except InvalidTransitionError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid status transition")
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/{deal_id}/publish_at", response_model=DealOut)
@@ -349,28 +239,13 @@ def update_publish_at(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> DealOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    role = _get_deal_role(db, deal, user)
-    if role != ROLE_OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if deal.status in {
-        DealStatus.POSTED,
-        DealStatus.VERIFYING,
-        DealStatus.RELEASED,
-        DealStatus.REFUNDED,
-        DealStatus.CANCELED,
-    }:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     if payload.publish_at is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="publish_at is required")
-    deal.publish_at = payload.publish_at
-    log_event(db, deal.id, "PUBLISH_AT_UPDATED", {"publish_at": payload.publish_at.isoformat()})
-    db.commit()
-    db.refresh(deal)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: publish_at -> {payload.publish_at.isoformat()}.")
-    return DealOut.model_validate(deal)
+    try:
+        deal = do_update_publish_at(db, deal_id, user.id, payload.publish_at)
+        return DealOut.model_validate(deal)
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/{deal_id}/status", response_model=DealOut)
@@ -380,25 +255,13 @@ def update_status(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> DealOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    role = _get_deal_role(db, deal, user)
-    allowed_for_role = ROLE_ALLOWED_STATUSES.get(role, set())
-    if payload.status not in allowed_for_role:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if not can_transition(deal.status, payload.status):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    if payload.status == DealStatus.AWAITING_PAYMENT:
-        existing = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
-        if not existing:
-            create_deposit(db, deal, deal.price)
-    set_status(deal, payload.status)
-    log_event(db, deal.id, "STATUS_UPDATED", {"status": payload.status})
-    db.commit()
-    db.refresh(deal)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: status -> {payload.status.value}.")
-    return DealOut.model_validate(deal)
+    try:
+        deal = do_update_status(db, deal_id, user.id, payload.status)
+        return DealOut.model_validate(deal)
+    except InvalidTransitionError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid status transition")
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/{deal_id}/creative", response_model=CreativeOut)
@@ -408,33 +271,13 @@ def create_creative(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> CreativeOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    is_owner, _ = _get_deal_role_flags(db, deal, user)
-    if not is_owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if deal.status not in {DealStatus.FUNDED, DealStatus.CREATIVE_DRAFT}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    if not payload.text and not payload.media_file_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    existing = db.query(Creative).filter(Creative.deal_id == deal_id).order_by(Creative.version.desc()).first()
-    version = 1 if not existing else existing.version + 1
-    creative = Creative(
-        deal_id=deal_id,
-        text=payload.text,
-        media_file_ids=payload.media_file_ids,
-        version=version,
-        status=CreativeStatus.REVIEW,
-    )
-    db.add(creative)
-    set_status(deal, DealStatus.CREATIVE_REVIEW)
-    log_event(db, deal.id, "CREATIVE_SUBMITTED", {"version": version})
-    db.commit()
-    db.refresh(creative)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: creative drafted v{version}.")
-    _send_creative_to_advertiser(deal, creative, db.get(User, deal.advertiser_id))
-    return CreativeOut.model_validate(creative)
+    try:
+        creative = do_create_creative(db, deal_id, user.id, payload.text, payload.media_file_ids)
+        return CreativeOut.model_validate(creative)
+    except InvalidTransitionError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid status transition")
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.get("/{deal_id}/creative", response_model=CreativeOut)
@@ -444,18 +287,11 @@ def get_creative(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> CreativeOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    _get_deal_role_flags(db, deal, user)
-    query = db.query(Creative).filter(Creative.deal_id == deal_id)
-    if version is not None:
-        creative = query.filter(Creative.version == version).first()
-    else:
-        creative = query.order_by(Creative.version.desc()).first()
-    if not creative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return CreativeOut.model_validate(creative)
+    try:
+        creative = do_get_creative(db, deal_id, user.id, version)
+        return CreativeOut.model_validate(creative)
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/{deal_id}/creative/status", response_model=CreativeOut)
@@ -465,51 +301,15 @@ def update_creative_status(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> CreativeOut:
-    creative = db.query(Creative).filter(Creative.deal_id == deal_id).order_by(Creative.version.desc()).first()
-    if not creative:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    _, is_advertiser = _get_deal_role_flags(db, deal, user)
-    if not is_advertiser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if deal.status != DealStatus.CREATIVE_REVIEW:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    comment = (payload.comment or "").strip() or None
-    if payload.status == CreativeStatus.DRAFT and not comment:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Comment is required for draft")
-    if payload.publish_at is not None:
-        deal.publish_at = payload.publish_at
-    if payload.status == CreativeStatus.APPROVED and deal.publish_at is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="publish_at is required for approval")
-    creative.status = payload.status
-    if payload.status == CreativeStatus.APPROVED:
-        set_status(deal, DealStatus.APPROVED)
-    elif payload.status == CreativeStatus.DRAFT:
-        set_status(deal, DealStatus.CREATIVE_DRAFT)
-    elif payload.status == CreativeStatus.REVIEW:
-        set_status(deal, DealStatus.CREATIVE_REVIEW)
-    log_payload: dict = {"status": payload.status}
-    if comment:
-        log_payload["comment"] = comment
-    if payload.publish_at is not None:
-        log_payload["publish_at"] = payload.publish_at.isoformat()
-    log_event(db, deal.id, "CREATIVE_STATUS", log_payload)
-    db.commit()
-    db.refresh(creative)
-    _notify_deal_parties(db, deal, f"Deal #{deal.id}: creative status -> {payload.status.value}.")
-    if payload.status == CreativeStatus.DRAFT and comment:
-        channel = db.get(Channel, deal.channel_id)
-        owner = db.get(User, channel.owner_user_id) if channel else None
-        if owner:
-            _send_deal_notification(
-                deal,
-                owner,
-                ROLE_OWNER,
-                f"Deal #{deal.id}: edits requested. Comment: {comment}",
-            )
-    return CreativeOut.model_validate(creative)
+    try:
+        creative = do_update_creative_status(
+            db, deal_id, user.id, payload.status, payload.comment, payload.publish_at,
+        )
+        return CreativeOut.model_validate(creative)
+    except InvalidTransitionError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid status transition")
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/{deal_id}/advertiser_brief", response_model=DealEventOut)
@@ -519,46 +319,13 @@ def add_advertiser_brief(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> DealEventOut:
-    deal = db.get(Deal, deal_id)
-    if not deal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    _, is_advertiser = _get_deal_role_flags(db, deal, user)
-    if not is_advertiser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    if not payload.text and not payload.media_file_ids and payload.publish_at is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-    if payload.publish_at is not None:
-        if deal.status in {
-            DealStatus.POSTED,
-            DealStatus.VERIFYING,
-            DealStatus.RELEASED,
-            DealStatus.REFUNDED,
-            DealStatus.CANCELED,
-        }:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-        deal.publish_at = payload.publish_at
-        log_event(db, deal.id, "PUBLISH_AT_REQUESTED", {"publish_at": payload.publish_at.isoformat()})
-    event_payload: dict = {
-        "text": payload.text,
-        "media_file_ids": payload.media_file_ids,
-    }
-    if payload.publish_at is not None:
-        event_payload["publish_at"] = payload.publish_at.isoformat()
-    event = DealEvent(deal_id=deal_id, type="ADVERTISER_BRIEF", payload=event_payload)
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-    channel = db.get(Channel, deal.channel_id)
-    owner = db.get(User, channel.owner_user_id) if channel else None
-    if owner and owner.tg_user_id:
-        lines = [f"Deal #{deal.id}: advertiser brief received."]
-        if payload.text:
-            lines.append(f"brief: {payload.text}")
-        if payload.publish_at is not None:
-            lines.append(f"publish_at: {payload.publish_at.isoformat()}")
-        send_media(int(owner.tg_user_id), "\n".join(lines), payload.media_file_ids)
-        _send_deal_notification(deal, owner, ROLE_OWNER, f"Deal #{deal.id}: advertiser brief received.")
-    return DealEventOut.model_validate(event)
+    try:
+        event = do_add_advertiser_brief(
+            db, deal_id, user.id, payload.text, payload.media_file_ids, payload.publish_at,
+        )
+        return DealEventOut.model_validate(event)
+    except ValueError as exc:
+        raise _handle_domain_error(exc)
 
 
 @router.post("/media/upload")

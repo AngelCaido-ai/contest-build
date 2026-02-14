@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg2://contest:contest@localhost:5432/contest"
     redis_url: str = "redis://localhost:6379/0"
     bot_token: str = ""
-    bot_secret: str = ""
-    jwt_secret: str = "change_me"
+    bot_secret: str
+    jwt_secret: str
     jwt_ttl_minutes: int = 1440
     telethon_api_id: int | None = None
     telethon_api_hash: str | None = None
@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     sweep_min_balance_ton: float = 0.005
     rate_limit_escrow_deposit: str = "10/minute"
     rate_limit_escrow_bot: str = "20/minute"
+    init_data_max_age_seconds: int = 300
 
     @field_validator("telethon_api_id", "bot_log_chat_id", "ton_wallet_id", "ton_wallet_subwallet", mode="before")
     @classmethod

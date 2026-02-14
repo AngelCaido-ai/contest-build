@@ -221,10 +221,10 @@ def _allowed_transitions_for_role(status: str, role: str) -> set[str]:
     return allowed & role_allowed
 
 
-def _resolve_deal_role(tg_user_id: int, deal: dict) -> str:
+async def _resolve_deal_role(tg_user_id: int, deal: dict) -> str:
     channel_id = deal.get("channel_id")
     try:
-        channels = api_client.list_channels(tg_user_id)
+        channels = await api_client.list_channels(tg_user_id)
     except Exception:
         return ROLE_ADVERTISER
     if any(item.get("id") == channel_id for item in channels):
@@ -767,12 +767,12 @@ async def _send_deal_details(
     set_active: bool = False,
 ) -> None:
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await message.answer(f"Failed to load deal: {exc}")
         return
     actor_id = tg_user_id if tg_user_id is not None else message.from_user.id
-    role = _resolve_deal_role(actor_id, deal)
+    role = await _resolve_deal_role(actor_id, deal)
     creative_version = None
     status = (deal.get("status") or "").upper()
     if status in {
@@ -785,7 +785,7 @@ async def _send_deal_details(
         "RELEASED",
     }:
         try:
-            creative = api_client.get_creative(deal_id, actor_id)
+            creative = await api_client.get_creative(deal_id, actor_id)
             version_value = creative.get("version")
             if isinstance(version_value, int):
                 creative_version = version_value
@@ -886,12 +886,12 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
     await _clear_deal_draft(state, deal_id)
     await state.set_state(state_value)
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     creative_version = None
     status = (deal.get("status") or "").upper()
     if status in {
@@ -904,7 +904,7 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
         "RELEASED",
     }:
         try:
-            creative = api_client.get_creative(deal_id, callback.from_user.id)
+            creative = await api_client.get_creative(deal_id, callback.from_user.id)
             version_value = creative.get("version")
             if isinstance(version_value, int):
                 creative_version = version_value
@@ -959,11 +959,11 @@ async def deal_draft_clear(callback: CallbackQuery, state: FSMContext) -> None:
     await _clear_deal_draft(state, deal_id)
     await callback.message.answer("Черновик удален.")
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception:
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     await _refresh_active_deal_pin(callback.message, state, deal, role, False)
     await callback.answer()
 
@@ -1017,16 +1017,16 @@ async def deal_payment_details(callback: CallbackQuery, state: FSMContext) -> No
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     draft_available = await _get_deal_draft(state, deal_id) is not None
     await _set_active_deal(callback.message, state, deal, role, draft_available)
     try:
-        payment = api_client.create_deposit(
+        payment = await api_client.create_deposit(
             deal_id,
             {
                 "actor_tg_user_id": callback.from_user.id,
@@ -1094,13 +1094,13 @@ async def deal_terms_start(callback: CallbackQuery, state: FSMContext) -> None:
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         if callback.message:
             await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     if role != ROLE_OWNER:
         if callback.message:
             await callback.message.answer("Only channel owner can update terms.")
@@ -1164,13 +1164,13 @@ async def deal_publish_at_start(callback: CallbackQuery, state: FSMContext) -> N
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         if callback.message:
             await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     if role != ROLE_OWNER:
         if callback.message:
             await callback.message.answer("Only channel owner can set publish time.")
@@ -1272,7 +1272,7 @@ async def deal_terms_format(message: Message, state: FSMContext) -> None:
         "format": format_value or "post",
     }
     try:
-        api_client.update_terms(data["deal_id"], payload)
+        await api_client.update_terms(data["deal_id"], payload)
         await message.answer("Terms updated")
     except Exception as exc:
         await message.answer(f"Failed to update terms: {exc}")
@@ -1295,7 +1295,7 @@ async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     payload = {"actor_tg_user_id": message.from_user.id, "publish_at": publish_at}
     try:
-        api_client.update_publish_at(data["deal_id"], payload)
+        await api_client.update_publish_at(data["deal_id"], payload)
         await message.answer("Publish time updated")
     except Exception as exc:
         await message.answer(f"Failed to update publish time: {exc}")
@@ -1310,14 +1310,14 @@ async def deal_status_start(callback: CallbackQuery, state: FSMContext) -> None:
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         if callback.message:
             await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
     status = (deal.get("status") or "").upper()
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     allowed = _allowed_transitions_for_role(status, role)
     draft_available = await _get_deal_draft(state, deal_id) is not None
     if callback.message:
@@ -1347,13 +1347,13 @@ async def deal_status_set(callback: CallbackQuery, state: FSMContext) -> None:
     deal_id = int(deal_id_value)
     status_value = status_value.upper()
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
     current = (deal.get("status") or "").upper()
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     allowed = _allowed_transitions_for_role(current, role)
     if not allowed:
         await callback.message.answer("No available status transitions.")
@@ -1364,7 +1364,7 @@ async def deal_status_set(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     try:
-        api_client.update_status(
+        await api_client.update_status(
             deal_id,
             {"status": status_value, "actor_tg_user_id": callback.from_user.id},
         )
@@ -1414,12 +1414,12 @@ async def deal_status_value(message: Message, state: FSMContext) -> None:
         await message.answer("Deal is required.")
         return
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await message.answer(f"Failed to load deal: {exc}")
         return
     current = (deal.get("status") or "").upper()
-    role = _resolve_deal_role(message.from_user.id, deal)
+    role = await _resolve_deal_role(message.from_user.id, deal)
     allowed = _allowed_transitions_for_role(current, role)
     if not allowed:
         await message.answer("No available status transitions.")
@@ -1428,7 +1428,7 @@ async def deal_status_value(message: Message, state: FSMContext) -> None:
         await message.answer("Status transition is not allowed.")
         return
     try:
-        api_client.update_status(
+        await api_client.update_status(
             deal_id,
             {"status": value, "actor_tg_user_id": message.from_user.id},
         )
@@ -1450,7 +1450,7 @@ async def deal_message_start(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer()
         return
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
@@ -1460,7 +1460,7 @@ async def deal_message_start(callback: CallbackQuery, state: FSMContext) -> None
         await callback.message.answer("Сделка завершена. Переписка недоступна.")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     draft_available = await _get_deal_draft(state, deal_id) is not None
     await _set_active_deal(callback.message, state, deal, role, draft_available)
     await state.update_data(deal_id=deal_id)
@@ -1515,7 +1515,7 @@ async def deal_message_history(callback: CallbackQuery) -> None:
         except ValueError:
             before_id = None
     try:
-        items = api_client.list_deal_messages(
+        items = await api_client.list_deal_messages(
             deal_id,
             callback.from_user.id,
             limit=8,
@@ -1570,7 +1570,7 @@ async def deal_message_content(message: Message, state: FSMContext) -> None:
         await _clear_state_keep(state)
         return
     try:
-        api_client.create_deal_message(
+        await api_client.create_deal_message(
             int(deal_id),
             {
                 "actor_tg_user_id": message.from_user.id,
@@ -1593,13 +1593,13 @@ async def deal_creative_start(callback: CallbackQuery, state: FSMContext) -> Non
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         if callback.message:
             await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     if role != ROLE_OWNER:
         if callback.message:
             await callback.message.answer("Only channel owner can create creative.")
@@ -1667,7 +1667,7 @@ async def deal_creative_content(message: Message, state: FSMContext) -> None:
         "media_file_ids": media_file_ids,
     }
     try:
-        api_client.create_creative(data["deal_id"], payload)
+        await api_client.create_creative(data["deal_id"], payload)
         await message.answer("Creative submitted for review")
     except Exception as exc:
         await message.answer(f"Failed to create creative: {exc}")
@@ -1683,13 +1683,13 @@ async def deal_creative_status_start(callback: CallbackQuery, state: FSMContext)
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         if callback.message:
             await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     if role != ROLE_ADVERTISER:
         if callback.message:
             await callback.message.answer("Only advertiser can review creative.")
@@ -1700,7 +1700,7 @@ async def deal_creative_status_start(callback: CallbackQuery, state: FSMContext)
         await _set_active_deal(callback.message, state, deal, role, draft_available)
     if callback.message:
         try:
-            creative = api_client.get_creative(deal_id, callback.from_user.id)
+            creative = await api_client.get_creative(deal_id, callback.from_user.id)
         except Exception as exc:
             await callback.message.answer(f"Failed to load creative: {exc}")
             await callback.answer()
@@ -1729,12 +1729,12 @@ async def deal_creative_status_set(callback: CallbackQuery, state: FSMContext) -
         await callback.answer()
         return
     try:
-        deal = api_client.get_deal(deal_id)
+        deal = await api_client.get_deal(deal_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load deal: {exc}")
         await callback.answer()
         return
-    role = _resolve_deal_role(callback.from_user.id, deal)
+    role = await _resolve_deal_role(callback.from_user.id, deal)
     if role != ROLE_ADVERTISER:
         await callback.message.answer("Only advertiser can review creative.")
         await callback.answer()
@@ -1753,7 +1753,7 @@ async def deal_creative_status_set(callback: CallbackQuery, state: FSMContext) -
             await callback.answer()
             return
     try:
-        api_client.update_creative_status(
+        await api_client.update_creative_status(
             deal_id,
             {"status": status_value, "actor_tg_user_id": callback.from_user.id},
         )
@@ -1800,7 +1800,7 @@ async def deal_creative_previous(callback: CallbackQuery) -> None:
     deal_id = int(deal_id_value)
     version = int(version_value)
     try:
-        creative = api_client.get_creative(deal_id, callback.from_user.id, version=version)
+        creative = await api_client.get_creative(deal_id, callback.from_user.id, version=version)
     except Exception as exc:
         await callback.message.answer(f"Failed to load creative: {exc}")
         await callback.answer()
@@ -1817,7 +1817,7 @@ async def deal_creative_view(callback: CallbackQuery) -> None:
         return
     deal_id = int(callback.data.split(":", 1)[1])
     try:
-        creative = api_client.get_creative(deal_id, callback.from_user.id)
+        creative = await api_client.get_creative(deal_id, callback.from_user.id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load creative: {exc}")
         await callback.answer()
@@ -1836,7 +1836,7 @@ async def deal_creative_status_comment(message: Message, state: FSMContext) -> N
     deal_id = data["deal_id"]
     status_value = (data.get("status") or "DRAFT").upper()
     try:
-        api_client.update_creative_status(
+        await api_client.update_creative_status(
             deal_id,
             {"status": status_value, "actor_tg_user_id": message.from_user.id, "comment": comment},
         )
@@ -1863,7 +1863,7 @@ async def deal_creative_status_publish_at(message: Message, state: FSMContext) -
     deal_id = data["deal_id"]
     status_value = (data.get("status") or "APPROVED").upper()
     try:
-        api_client.update_creative_status(
+        await api_client.update_creative_status(
             deal_id,
             {
                 "status": status_value,
@@ -1894,7 +1894,7 @@ async def deal_creative_status_value(message: Message, state: FSMContext) -> Non
         return
     if value == "APPROVED":
         try:
-            deal = api_client.get_deal(deal_id)
+            deal = await api_client.get_deal(deal_id)
         except Exception as exc:
             await message.answer(f"Failed to load deal: {exc}")
             return
@@ -1904,7 +1904,7 @@ async def deal_creative_status_value(message: Message, state: FSMContext) -> Non
             await _prompt_creative_status_publish_at(message, deal_id, state=state)
             return
     try:
-        api_client.update_creative_status(
+        await api_client.update_creative_status(
             deal_id,
             {"status": value, "actor_tg_user_id": message.from_user.id},
         )
@@ -1942,7 +1942,7 @@ async def set_terms(message: Message, state: FSMContext) -> None:
         "format": format_value,
     }
     try:
-        api_client.update_terms(deal_id, payload)
+        await api_client.update_terms(deal_id, payload)
         await message.answer("Terms updated")
     except Exception as exc:
         await message.answer(f"Failed to update terms: {exc}")
@@ -1966,7 +1966,7 @@ async def set_status(message: Message, state: FSMContext) -> None:
         return
     status_value = parts[2]
     try:
-        api_client.update_status(
+        await api_client.update_status(
             deal_id,
             {"status": status_value, "actor_tg_user_id": message.from_user.id},
         )
@@ -2003,7 +2003,7 @@ async def create_creative(message: Message, state: FSMContext) -> None:
         "media_file_ids": media_file_ids,
     }
     try:
-        api_client.create_creative(deal_id, payload)
+        await api_client.create_creative(deal_id, payload)
         await message.answer("Creative submitted for review")
     except Exception as exc:
         await message.answer(f"Failed to create creative: {exc}")
@@ -2036,7 +2036,7 @@ async def creative_status(message: Message, state: FSMContext) -> None:
     if status_value == "APPROVED":
         publish_at = None
         try:
-            deal = api_client.get_deal(deal_id)
+            deal = await api_client.get_deal(deal_id)
             publish_at = deal.get("publish_at")
         except Exception as exc:
             await message.answer(f"Failed to load deal: {exc}")
@@ -2055,7 +2055,7 @@ async def creative_status(message: Message, state: FSMContext) -> None:
                 return
             payload["publish_at"] = publish_at
     try:
-        api_client.update_creative_status(
+        await api_client.update_creative_status(
             deal_id,
             payload,
         )

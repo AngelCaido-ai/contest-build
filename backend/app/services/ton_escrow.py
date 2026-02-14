@@ -181,13 +181,13 @@ def decrypt_deposit_key(value: str) -> str:
     try:
         raw = _b64decode(value)
         if len(raw) <= 12:
-            raise ValueError("token_short")
+            raise ValueError("deposit_key_too_short")
         nonce = raw[:12]
         encrypted = raw[12:]
         aesgcm = AESGCM(_escrow_key())
         return aesgcm.decrypt(nonce, encrypted, None).decode()
-    except Exception:
-        return value
+    except Exception as exc:
+        raise ValueError(f"deposit_key_decrypt_failed: {exc}") from exc
 
 
 def build_deposit_comment(deal_id: int) -> str:

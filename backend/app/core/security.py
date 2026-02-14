@@ -33,9 +33,18 @@ def verify_init_data(init_data: str) -> dict:
         data_check_string.encode(),
         hashlib.sha256,
     ).hexdigest()
-    if computed_hash != received_hash:
+    if not hmac.compare_digest(computed_hash, received_hash):
         return {}
     parsed = dict(parse_qsl(init_data, strict_parsing=True))
+    auth_date_raw = parsed.get("auth_date")
+    if not auth_date_raw:
+        return {}
+    try:
+        auth_date = int(auth_date_raw)
+    except (ValueError, TypeError):
+        return {}
+    if int(time.time()) - auth_date > settings.init_data_max_age_seconds:
+        return {}
     user_raw = parsed.get("user")
     if not user_raw:
         return {}

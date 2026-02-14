@@ -29,7 +29,7 @@ export function ListingsPage() {
     return apiFetch<Listing[]>(`/listings${qs ? `?${qs}` : ""}`);
   }, [priceMin, priceMax]);
 
-  const { data: listings, loading, refetch } = useApi(fetcher, [priceMin, priceMax]);
+  const { data: listings, loading, error, refetch } = useApi(fetcher, [priceMin, priceMax]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -76,7 +76,15 @@ export function ListingsPage() {
         </Group>
       )}
 
-      {!loading && (!listings || listings.length === 0) && (
+      {!loading && error && (
+        <EmptyState
+          icon="⚠️"
+          title="Ошибка загрузки"
+          description={error}
+        />
+      )}
+
+      {!loading && !error && (!listings || listings.length === 0) && (
         <EmptyState
           icon="📋"
           title="Нет размещений"

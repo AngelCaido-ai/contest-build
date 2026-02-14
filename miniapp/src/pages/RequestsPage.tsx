@@ -27,7 +27,7 @@ export function RequestsPage() {
     return apiFetch<RequestItem[]>(`/requests${qs ? `?${qs}` : ""}`);
   }, [budgetMin, budgetMax]);
 
-  const { data: requests, loading, refetch } = useApi(fetcher, [budgetMin, budgetMax]);
+  const { data: requests, loading, error, refetch } = useApi(fetcher, [budgetMin, budgetMax]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,7 +74,15 @@ export function RequestsPage() {
         </Group>
       )}
 
-      {!loading && (!requests || requests.length === 0) && (
+      {!loading && error && (
+        <EmptyState
+          icon="⚠️"
+          title="Ошибка загрузки"
+          description={error}
+        />
+      )}
+
+      {!loading && !error && (!requests || requests.length === 0) && (
         <EmptyState
           icon="📝"
           title="Нет заявок"

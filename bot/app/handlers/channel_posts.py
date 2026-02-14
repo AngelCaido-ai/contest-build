@@ -25,7 +25,7 @@ async def _handle_edit(message: Message) -> None:
         message.chat.type,
     )
     try:
-        api_client.mark_tamper(channel_id, message.message_id)
+        await api_client.mark_tamper(channel_id, message.message_id)
     except Exception as exc:
         logger.error(
             "mark_tamper failed: chat_id=%s message_id=%s error=%s",

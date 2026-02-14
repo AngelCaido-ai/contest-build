@@ -2,11 +2,12 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 
 from bot.app.config import settings
 from bot.app.handlers import deals, marketplace, onboarding, start
 from bot.app.keyboards import calendar as calendar_kb
+from bot.app.services import api_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ async def main() -> None:
     logger.info(f"Bot token length: {len(settings.bot_token)}")
     logger.info(f"API base URL: {settings.api_base_url}")
     logger.info(f"Bot secret length: {len(settings.bot_secret)}")
+    logger.info(f"Redis URL: {settings.redis_url}")
     
     try:
         bot = Bot(token=settings.bot_token)
@@ -24,7 +26,8 @@ async def main() -> None:
         bot_info = await bot.get_me()
         logger.info(f"Bot connected: @{bot_info.username} ({bot_info.first_name})")
         
-        dp = Dispatcher(storage=MemoryStorage())
+        storage = RedisStorage.from_url(settings.redis_url)
+        dp = Dispatcher(storage=storage)
         dp.include_router(calendar_kb.router)
         dp.include_router(start.router)
         dp.include_router(onboarding.router)
@@ -35,8 +38,16 @@ async def main() -> None:
         await bot.delete_webhook(drop_pending_updates=True)
         allowed_updates = dp.resolve_used_update_types()
         logger.info(f"Allowed updates: {allowed_updates}")
-        logger.info("Starting polling...")
-        await dp.start_polling(bot, allowed_updates=allowed_updates)
+
+        api_client.init_client()
+        logger.info("httpx AsyncClient initialized")
+
+        try:
+            logger.info("Starting polling...")
+            await dp.start_polling(bot, allowed_updates=allowed_updates)
+        finally:
+            await api_client.close_client()
+            logger.info("httpx AsyncClient closed")
     except Exception as e:
         logger.error(f"Error in main: {e}", exc_info=True)
         raise

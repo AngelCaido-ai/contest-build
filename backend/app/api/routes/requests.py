@@ -45,6 +45,7 @@ def list_requests(
     budget_min: float | None = Query(default=None),
     budget_max: float | None = Query(default=None),
     db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ) -> list[RequestOut]:
     query = db.query(Request)
     if budget_min is not None:
@@ -56,7 +57,7 @@ def list_requests(
 
 
 @router.get("/{request_id}", response_model=RequestOut)
-def get_request(request_id: int, db: Session = Depends(get_db)) -> RequestOut:
+def get_request(request_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)) -> RequestOut:
     item = db.get(Request, request_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

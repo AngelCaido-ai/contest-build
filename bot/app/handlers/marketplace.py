@@ -216,7 +216,7 @@ async def _link_channel(message: Message, bot: Bot, chat) -> int | None:
         },
     }
     try:
-        result = api_client.create_channel(payload)
+        result = await api_client.create_channel(payload)
     except Exception as exc:
         await message.answer(f"Failed to link channel: {exc}")
         return None
@@ -235,7 +235,7 @@ async def _resolve_channel_id(message: Message, bot: Bot, value: str) -> int | N
     if _is_int(ref):
         number = int(ref)
         try:
-            items = api_client.list_channels(message.from_user.id)
+            items = await api_client.list_channels(message.from_user.id)
         except Exception:
             items = []
         if number > 0:
@@ -253,7 +253,7 @@ async def _resolve_channel_id(message: Message, bot: Bot, value: str) -> int | N
             return None
         return await _link_channel(message, bot, chat)
     try:
-        items = api_client.list_channels(message.from_user.id)
+        items = await api_client.list_channels(message.from_user.id)
     except Exception:
         items = []
     match = _find_channel(items, username=ref)
@@ -386,7 +386,7 @@ async def _prompt_wallet(message: Message) -> None:
 
 async def _check_wallet(message: Message, tg_user_id: int) -> bool:
     try:
-        data = api_client.auth_bot(tg_user_id)
+        data = await api_client.auth_bot(tg_user_id)
         user = data.get("user") or {}
         if user.get("linked_wallet"):
             return True
@@ -405,7 +405,7 @@ async def _check_wallet(message: Message, tg_user_id: int) -> bool:
 
 async def _prompt_listing_channel_select(message: Message, tg_user_id: int) -> None:
     try:
-        items = api_client.list_channels(tg_user_id)
+        items = await api_client.list_channels(tg_user_id)
     except Exception as exc:
         await message.answer(f"Failed to load channels: {exc}")
         await _prompt_listing_channel_manual(message)
@@ -437,7 +437,7 @@ async def _prompt_listing_channel_manual(message: Message) -> None:
 
 async def _prompt_manager_channel_select(message: Message, tg_user_id: int, flow: str) -> None:
     try:
-        items = api_client.list_channels(tg_user_id)
+        items = await api_client.list_channels(tg_user_id)
     except Exception as exc:
         await message.answer(f"Failed to load channels: {exc}")
         return
@@ -473,7 +473,7 @@ async def _prompt_manager_username(message: Message) -> None:
 
 async def _load_managers(message: Message, channel_id: int) -> list[dict] | None:
     try:
-        items = api_client.list_channel_managers(message.from_user.id, channel_id)
+        items = await api_client.list_channel_managers(message.from_user.id, channel_id)
     except Exception as exc:
         await message.answer(f"Не удалось загрузить менеджеров: {exc}")
         return None
@@ -502,7 +502,7 @@ async def _add_manager_by_username(message: Message, channel_id: int, username_r
         await message.answer("Введите корректный @username.")
         return False
     try:
-        api_client.add_channel_manager(message.from_user.id, channel_id, username)
+        await api_client.add_channel_manager(message.from_user.id, channel_id, username)
     except Exception as exc:
         await message.answer(f"Не удалось добавить менеджера: {exc}")
         return False
@@ -621,7 +621,7 @@ async def _prompt_request_brief(message: Message) -> None:
 
 async def _send_listings(message: Message) -> None:
     try:
-        items = api_client.list_listings()
+        items = await api_client.list_listings()
     except Exception as exc:
         await message.answer(f"Failed to load listings: {exc}")
         return
@@ -642,7 +642,7 @@ async def _send_listings(message: Message) -> None:
 
 async def _send_requests(message: Message) -> None:
     try:
-        items = api_client.list_requests()
+        items = await api_client.list_requests()
     except Exception as exc:
         await message.answer(f"Failed to load requests: {exc}")
         return
@@ -742,7 +742,7 @@ async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | Non
     limit = DEALS_PAGE_SIZE + 1
     offset = page * DEALS_PAGE_SIZE
     try:
-        items = api_client.list_deals(
+        items = await api_client.list_deals(
             user_id,
             statuses=statuses,
             role=role_param,
@@ -761,7 +761,7 @@ async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | Non
     if has_more:
         items = items[:DEALS_PAGE_SIZE]
     try:
-        channels = api_client.list_channels(user_id)
+        channels = await api_client.list_channels(user_id)
     except Exception:
         channels = []
     channel_ids = {item.get("id") for item in channels if item.get("id") is not None}
@@ -839,7 +839,7 @@ async def list_requests(message: Message) -> None:
 @router.message(Command("channels"))
 async def list_channels(message: Message) -> None:
     try:
-        items = api_client.list_channels(message.from_user.id)
+        items = await api_client.list_channels(message.from_user.id)
     except Exception as exc:
         await message.answer(f"Failed to load channels: {exc}")
         return
@@ -861,7 +861,7 @@ async def list_channels(message: Message) -> None:
 @router.message(Command("assigned_channels"))
 async def list_assigned_channels(message: Message) -> None:
     try:
-        auth = api_client.auth_bot(message.from_user.id)
+        auth = await api_client.auth_bot(message.from_user.id)
     except Exception as exc:
         await message.answer(f"Failed to load user: {exc}")
         return
@@ -871,7 +871,7 @@ async def list_assigned_channels(message: Message) -> None:
         await message.answer("User not found.")
         return
     try:
-        items = api_client.list_channels(message.from_user.id)
+        items = await api_client.list_channels(message.from_user.id)
     except Exception as exc:
         await message.answer(f"Failed to load channels: {exc}")
         return
@@ -955,7 +955,7 @@ async def respond_request(message: Message) -> None:
         "verification_window": verification_window,
     }
     try:
-        deal = api_client.create_deal(payload)
+        deal = await api_client.create_deal(payload)
         await message.answer(f"Deal created: #{deal.get('id')}", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create deal: {exc}")
@@ -992,7 +992,7 @@ async def create_request(message: Message, state: FSMContext) -> None:
         "brief": brief,
     }
     try:
-        api_client.create_request(payload)
+        await api_client.create_request(payload)
         await message.answer("Request created", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create request: {exc}")
@@ -1019,7 +1019,7 @@ async def create_listing(message: Message, state: FSMContext, bot: Bot) -> None:
         "format": format_value,
     }
     try:
-        api_client.create_listing(payload)
+        await api_client.create_listing(payload)
         await message.answer("Listing created", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create listing: {exc}")
@@ -1201,7 +1201,7 @@ async def wallet_address(message: Message, state: FSMContext) -> None:
         return
     payload = {"actor_tg_user_id": message.from_user.id, "linked_wallet": value}
     try:
-        api_client.update_wallet(message.from_user.id, payload)
+        await api_client.update_wallet(message.from_user.id, payload)
         await message.answer("Wallet updated", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to update wallet: {exc}")
@@ -1294,7 +1294,7 @@ async def manager_remove_confirm(callback: CallbackQuery, state: FSMContext) -> 
         await callback.answer()
         return
     try:
-        api_client.remove_channel_manager(callback.from_user.id, channel_id, manager_id)
+        await api_client.remove_channel_manager(callback.from_user.id, channel_id, manager_id)
     except Exception as exc:
         await callback.message.answer(f"Не удалось удалить менеджера: {exc}")
         await callback.answer()
@@ -1312,14 +1312,14 @@ async def listing_details(callback: CallbackQuery) -> None:
         return
     listing_id = int(callback.data.split(":", 1)[1])
     try:
-        listing = api_client.get_listing(listing_id)
+        listing = await api_client.get_listing(listing_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load listing: {exc}")
         await callback.answer()
         return
     is_own = False
     try:
-        channels = api_client.list_channels(callback.from_user.id)
+        channels = await api_client.list_channels(callback.from_user.id)
         is_own = any(item.get("id") == listing.get("channel_id") for item in channels)
     except Exception:
         is_own = False
@@ -1355,7 +1355,7 @@ async def listing_respond_start(callback: CallbackQuery, state: FSMContext) -> N
         return
     listing_id = int(callback.data.split(":", 1)[1])
     try:
-        listing = api_client.get_listing(listing_id)
+        listing = await api_client.get_listing(listing_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load listing: {exc}")
         await callback.answer()
@@ -1365,7 +1365,7 @@ async def listing_respond_start(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer()
         return
     try:
-        channels = api_client.list_channels(callback.from_user.id)
+        channels = await api_client.list_channels(callback.from_user.id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load channels: {exc}")
         await callback.answer()
@@ -1401,7 +1401,7 @@ async def request_details(callback: CallbackQuery) -> None:
         return
     request_id = int(callback.data.split(":", 1)[1])
     try:
-        request_item = api_client.get_request(request_id)
+        request_item = await api_client.get_request(request_id)
     except Exception as exc:
         await callback.message.answer(f"Failed to load request: {exc}")
         await callback.answer()
@@ -1463,7 +1463,7 @@ async def listing_format(message: Message, state: FSMContext) -> None:
         "format": format_value or "post",
     }
     try:
-        api_client.create_listing(payload)
+        await api_client.create_listing(payload)
         await message.answer("Listing created", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create listing: {exc}")
@@ -1644,7 +1644,7 @@ async def listing_respond_creative(message: Message, state: FSMContext) -> None:
         await _clear_state_keep(state)
         return
     try:
-        listing = api_client.get_listing(int(listing_id))
+        listing = await api_client.get_listing(int(listing_id))
     except Exception as exc:
         await message.answer(f"Failed to load listing: {exc}")
         await _clear_state_keep(state)
@@ -1662,7 +1662,7 @@ async def listing_respond_creative(message: Message, state: FSMContext) -> None:
         "publish_at": data.get("publish_at"),
     }
     try:
-        deal = api_client.create_deal(payload)
+        deal = await api_client.create_deal(payload)
         deal_id = int(deal.get("id"))
         brief_lines = []
         if data.get("brief"):
@@ -1672,7 +1672,7 @@ async def listing_respond_creative(message: Message, state: FSMContext) -> None:
         brief_text = "\n".join(brief_lines) if brief_lines else None
         if brief_text or data.get("publish_at") or media_file_ids:
             try:
-                api_client.create_advertiser_brief(
+                await api_client.create_advertiser_brief(
                     deal_id,
                     {
                         "actor_tg_user_id": message.from_user.id,
@@ -1721,7 +1721,7 @@ async def request_brief(message: Message, state: FSMContext) -> None:
         "brief": brief,
     }
     try:
-        api_client.create_request(payload)
+        await api_client.create_request(payload)
         await message.answer("Request created", reply_markup=_main_menu_keyboard())
     except Exception as exc:
         await message.answer(f"Failed to create request: {exc}")

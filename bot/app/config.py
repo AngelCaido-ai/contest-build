@@ -6,6 +6,7 @@ class BotSettings(BaseSettings):
     bot_token: str
     api_base_url: str = "http://localhost:8000"
     bot_secret: str
+    redis_url: str = "redis://localhost:6379/1"
 
     @field_validator("bot_token", "bot_secret", "api_base_url", mode="before")
     @classmethod

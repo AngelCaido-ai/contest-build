@@ -51,6 +51,17 @@ app.include_router(bot_actions.router, prefix="/bot", tags=["bot"])
 
 
 @app.on_event("startup")
+def validate_secrets() -> None:
+    if settings.jwt_secret == "change_me":
+        raise RuntimeError("JWT_SECRET must not be the default 'change_me'")
+    if len(settings.jwt_secret) < 32:
+        raise RuntimeError("JWT_SECRET must be at least 32 characters long")
+    if not settings.bot_secret:
+        raise RuntimeError("BOT_SECRET must not be empty")
+    logger.info("secrets validated")
+
+
+@app.on_event("startup")
 def validate_escrow_secret_key() -> None:
     try:
         ton_escrow.ensure_escrow_secret_key()

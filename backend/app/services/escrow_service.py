@@ -10,10 +10,20 @@ from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
 from app.models.user import User
 from app.models.channel import Channel
-from app.services.deal_service import log_event, set_status
+from app.services.deal_service import InvalidTransitionError, log_event, set_status
 from app.services import ton_escrow
 
 logger = logging.getLogger(__name__)
+
+
+def _lock_row(db: Session, model, *filters):
+    q = db.query(model).filter(*filters)
+    try:
+        if db.bind.dialect.name != "sqlite":
+            q = q.with_for_update()
+    except Exception:
+        q = q.with_for_update()
+    return q.first()
 
 
 def create_deposit(db: Session, deal: Deal, expected_amount: float | None) -> EscrowPayment:
@@ -57,6 +67,7 @@ def create_deposit(db: Session, deal: Deal, expected_amount: float | None) -> Es
 
 
 def confirm_payment(db: Session, deal: Deal, payment: EscrowPayment, tx_hash: str) -> EscrowPayment:
+    payment = _lock_row(db, EscrowPayment, EscrowPayment.id == payment.id)
     if payment.tx_hash:
         logger.info("confirm_payment: already confirmed deal_id=%s", deal.id)
         return payment
@@ -68,6 +79,9 @@ def confirm_payment(db: Session, deal: Deal, payment: EscrowPayment, tx_hash: st
         db.commit()
         db.refresh(payment)
         logger.info("confirm_payment: success deal_id=%s tx_hash=%s", deal.id, tx_hash)
+        return payment
+    except InvalidTransitionError:
+        logger.warning("confirm_payment: transition skipped deal_id=%s status=%s", deal.id, deal.status)
         return payment
     except Exception:
         logger.exception("confirm_payment: error deal_id=%s", deal.id)
@@ -97,6 +111,10 @@ def scan_incoming_payments(db: Session) -> int:
             continue
         if not tx_hash:
             continue
+        payment = _lock_row(db, EscrowPayment, EscrowPayment.id == payment.id)
+        deal = _lock_row(db, Deal, Deal.id == payment.deal_id)
+        if payment.tx_hash:
+            continue
         confirm_payment(db, deal, payment, tx_hash)
         processed += 1
     logger.info("scan_incoming_payments: processed %d payments", processed)
@@ -105,7 +123,8 @@ def scan_incoming_payments(db: Session) -> int:
 
 def release_payment(db: Session, deal: Deal, payout_address: str | None) -> EscrowPayment:
     logger.info("release_payment: start deal_id=%s", deal.id)
-    payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal.id).first()
+    deal = _lock_row(db, Deal, Deal.id == deal.id)
+    payment = _lock_row(db, EscrowPayment, EscrowPayment.deal_id == deal.id)
     if not payment or not payment.tx_hash:
         logger.warning("release_payment: not funded deal_id=%s", deal.id)
         raise ValueError("payment_not_funded")
@@ -134,6 +153,9 @@ def release_payment(db: Session, deal: Deal, payout_address: str | None) -> Escr
         db.refresh(payment)
         logger.info("release_payment: success deal_id=%s tx_hash=%s", deal.id, tx_hash)
         return payment
+    except InvalidTransitionError:
+        logger.warning("release_payment: transition skipped deal_id=%s status=%s", deal.id, deal.status)
+        return payment
     except ValueError:
         raise
     except Exception:
@@ -143,7 +165,8 @@ def release_payment(db: Session, deal: Deal, payout_address: str | None) -> Escr
 
 def refund_payment(db: Session, deal: Deal, refund_address: str | None, reason: str | None) -> EscrowPayment:
     logger.info("refund_payment: start deal_id=%s reason=%s", deal.id, reason)
-    payment = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal.id).first()
+    deal = _lock_row(db, Deal, Deal.id == deal.id)
+    payment = _lock_row(db, EscrowPayment, EscrowPayment.deal_id == deal.id)
     if not payment or not payment.tx_hash:
         logger.warning("refund_payment: not funded deal_id=%s", deal.id)
         raise ValueError("payment_not_funded")
@@ -174,6 +197,9 @@ def refund_payment(db: Session, deal: Deal, refund_address: str | None, reason: 
         db.refresh(payment)
         logger.info("refund_payment: success deal_id=%s tx_hash=%s", deal.id, tx_hash)
         return payment
+    except InvalidTransitionError:
+        logger.warning("refund_payment: transition skipped deal_id=%s status=%s", deal.id, deal.status)
+        return payment
     except ValueError:
         raise
     except Exception:
@@ -183,6 +209,8 @@ def refund_payment(db: Session, deal: Deal, refund_address: str | None, reason: 
 
 def sweep_deposit(db: Session, deal: Deal, payment: EscrowPayment) -> EscrowPayment:
     logger.info("sweep_deposit: start deal_id=%s", deal.id)
+    deal = _lock_row(db, Deal, Deal.id == deal.id)
+    payment = _lock_row(db, EscrowPayment, EscrowPayment.id == payment.id)
     if deal.status not in (DealStatus.RELEASED, DealStatus.REFUNDED):
         logger.warning("sweep_deposit: invalid status deal_id=%s status=%s", deal.id, deal.status)
         raise ValueError("deal_not_completed")

@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from watcher.app.config import settings
-from watcher.app.handlers import router
+from watcher.app.handlers import close_client, init_client, router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,8 +26,16 @@ async def main() -> None:
         await bot.delete_webhook(drop_pending_updates=True)
         allowed_updates = ["edited_channel_post", "edited_message", "channel_post"]
         logger.info("Watcher allowed updates: %s", allowed_updates)
-        logger.info("Starting watcher polling...")
-        await dp.start_polling(bot, allowed_updates=allowed_updates)
+
+        init_client()
+        logger.info("Watcher httpx AsyncClient initialized")
+
+        try:
+            logger.info("Starting watcher polling...")
+            await dp.start_polling(bot, allowed_updates=allowed_updates)
+        finally:
+            await close_client()
+            logger.info("Watcher httpx AsyncClient closed")
     except Exception as e:
         logger.error("Watcher error: %s", e, exc_info=True)
         raise

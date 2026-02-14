@@ -31,10 +31,15 @@ class TonEscrowTests(unittest.TestCase):
         decrypted = ton_escrow.decrypt_deposit_key(encrypted)
         self.assertEqual(plain, decrypted)
 
-    def test_decrypt_plain_fallback(self):
-        plain = "alpha beta gamma"
-        decrypted = ton_escrow.decrypt_deposit_key(plain)
-        self.assertEqual(plain, decrypted)
+    def test_decrypt_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            ton_escrow.decrypt_deposit_key("alpha beta gamma")
+
+    def test_decrypt_wrong_key_raises(self):
+        encrypted = ton_escrow.encrypt_deposit_key("test mnemonic")
+        settings.escrow_secret_key = base64.urlsafe_b64encode(b"1" * 32).decode()
+        with self.assertRaises(ValueError):
+            ton_escrow.decrypt_deposit_key(encrypted)
 
     def test_extract_comment_from_message(self):
         in_msg = {"message": "deal:1"}

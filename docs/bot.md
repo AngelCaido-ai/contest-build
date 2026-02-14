@@ -1,6 +1,6 @@
 # Модуль bot
 
-Telegram-бот на **aiogram 3** с FSM (конечный автомат), inline-клавиатурами и синхронным HTTP-клиентом к backend API.
+Telegram-бот на **aiogram 3** с FSM (конечный автомат), inline-клавиатурами и асинхронным HTTP-клиентом к backend API.
 
 ## Структура
 
@@ -22,7 +22,7 @@ bot/
 │   │   └── calendar.py        # Inline-календарь для выбора даты/времени публикации
 │   └── services/
 │       ├── __init__.py
-│       └── api_client.py      # Синхронный HTTP-клиент к backend API
+│       └── api_client.py      # Асинхронный HTTP-клиент к backend API (httpx)
 ```
 
 ---
@@ -36,6 +36,7 @@ bot/
 | `BOT_TOKEN`    | str   | —                         | Токен Telegram-бота             |
 | `API_BASE_URL` | str   | `http://localhost:8000`   | Базовый URL backend API         |
 | `BOT_SECRET`   | str   | —                         | Секрет для заголовка X-Bot-Secret |
+| `REDIS_URL`    | str   | `redis://localhost:6379/1`| URL Redis для FSM-storage (DB 1, отдельно от RQ на DB 0) |
 
 Валидатор `normalize_env` снимает лишние кавычки и пробелы из значений переменных.
 
@@ -45,9 +46,11 @@ bot/
 
 Функция `main()`:
 1. Создаёт экземпляр `Bot` и проверяет подключение (`get_me`).
-2. Создаёт `Dispatcher` с `MemoryStorage` для FSM.
+2. Создаёт `Dispatcher` с `RedisStorage` для FSM (persistent-хранилище, данные сохраняются между рестартами).
 3. Подключает роутеры в порядке: `calendar` → `start` → `onboarding` → `marketplace` → `deals`.
-4. Удаляет вебхук и запускает polling.
+4. Удаляет вебхук.
+5. Инициализирует singleton `httpx.AsyncClient` через `api_client.init_client()`.
+6. Запускает polling, при остановке закрывает клиент через `api_client.close_client()`.
 
 > Tamper detection (отслеживание правок постов) выполняется отдельным watcher-ботом — см. `docs/watcher.md`.
 
@@ -290,7 +293,15 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 
 ## API-клиент (`api_client.py`)
 
-Синхронный HTTP-клиент на `requests`. Все запросы к backend идут с заголовком `X-Bot-Secret`. Для операций с менеджерами используется JWT-авторизация через `auth_bot`.
+Асинхронный HTTP-клиент на `httpx.AsyncClient`. Singleton-клиент создаётся при старте бота (`init_client()`) и переиспользуется для connection pooling. Timeout: 10 сек на полный запрос, 5 сек на connect. Все запросы к backend идут с заголовком `X-Bot-Secret`. Для операций с менеджерами используется JWT-авторизация через `auth_bot`. При остановке бота клиент закрывается (`close_client()`).
+
+### Lifecycle
+
+| Функция         | Описание                                      |
+|-----------------|-----------------------------------------------|
+| `init_client()` | Создаёт `httpx.AsyncClient` с `base_url`, `timeout`, `headers` |
+| `close_client()`| Закрывает клиент (`await client.aclose()`)    |
+| `_get_client()` | Возвращает клиент, бросает `RuntimeError` если не инициализирован |
 
 ### Методы
 
@@ -333,7 +344,8 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 
 - **aiogram 3** — Telegram Bot Framework (Router, FSM, InlineKeyboard)
 - **pydantic / pydantic-settings** — конфигурация
-- **requests** — HTTP-клиент к backend
+- **httpx** — асинхронный HTTP-клиент к backend (connection pooling, timeout)
+- **redis** — async-клиент для RedisStorage (FSM persistence)
 
 ## Запуск
 
@@ -341,4 +353,4 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 python -m bot.app.main
 ```
 
-Требуемые переменные окружения: `BOT_TOKEN`, `BOT_SECRET`, `API_BASE_URL`.
+Требуемые переменные окружения: `BOT_TOKEN`, `BOT_SECRET`, `API_BASE_URL`, `REDIS_URL`.

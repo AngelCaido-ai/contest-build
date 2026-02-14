@@ -53,7 +53,7 @@ def auth_miniapp(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthRes
         tg_username = _normalize_tg_username(user_data.get("username"))
         user = db.query(User).filter(User.tg_user_id == tg_user_id).first()
         if not user:
-            user = User(tg_user_id=tg_user_id, roles=payload.roles or ["advertiser"])
+            user = User(tg_user_id=tg_user_id, roles=["advertiser"])
             db.add(user)
             db.commit()
             db.refresh(user)
@@ -76,7 +76,7 @@ def auth_bot(payload: BotAuthRequest, db: Session = Depends(get_db)) -> AuthResp
     try:
         user = db.query(User).filter(User.tg_user_id == payload.tg_user_id).first()
         if not user:
-            user = User(tg_user_id=payload.tg_user_id, roles=payload.roles or ["advertiser"])
+            user = User(tg_user_id=payload.tg_user_id, roles=["advertiser"])
             db.add(user)
             db.commit()
             db.refresh(user)

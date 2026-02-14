@@ -21,7 +21,7 @@ async def start_handler(
     state: FSMContext,
 ) -> None:
     try:
-        api_client.upsert_user(message.from_user.id, message.from_user.username)
+        await api_client.upsert_user(message.from_user.id, message.from_user.username)
         logger.info("start: upsert user tg_user_id=%s", message.from_user.id)
     except Exception:
         logger.exception("start: upsert_user failed tg_user_id=%s", message.from_user.id)
@@ -55,8 +55,8 @@ async def start_handler(
 @router.message(Command("test_deal"))
 async def test_deal_handler(message: Message) -> None:
     try:
-        api_client.upsert_user(message.from_user.id, message.from_user.username)
-        result = api_client.create_test_deal(message.from_user.id)
+        await api_client.upsert_user(message.from_user.id, message.from_user.username)
+        result = await api_client.create_test_deal(message.from_user.id)
         deal_id = result.get("deal_id")
         publish_at = result.get("publish_at")
         window = result.get("verification_window")

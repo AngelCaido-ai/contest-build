@@ -1,3 +1,4 @@
+import hmac
 from typing import Generator
 
 from fastapi import Depends, Header, HTTPException, status
@@ -60,5 +61,5 @@ def get_optional_current_user(
 
 
 def get_bot_secret(x_bot_secret: str | None = Header(default=None)) -> None:
-    if not x_bot_secret or x_bot_secret != settings.bot_secret:
+    if not x_bot_secret or not hmac.compare_digest(x_bot_secret, settings.bot_secret):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

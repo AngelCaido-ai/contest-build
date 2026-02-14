@@ -11,7 +11,7 @@ from app.models.deal import Deal
 from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
 from app.schemas.escrow import EscrowDepositRequest, EscrowOut
-from app.services.escrow_service import create_deposit
+from app.services.escrow_service import _lock_row, create_deposit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,7 +32,8 @@ def create_deposit_address(
     channel = db.get(Channel, deal.channel_id)
     if deal.advertiser_id != user.id and (not channel or channel.owner_user_id != user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    existing = db.query(EscrowPayment).filter(EscrowPayment.deal_id == deal_id).first()
+    deal = _lock_row(db, Deal, Deal.id == deal_id)
+    existing = _lock_row(db, EscrowPayment, EscrowPayment.deal_id == deal_id)
     if existing:
         return EscrowOut.model_validate(existing)
     if deal.status not in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:

@@ -10,8 +10,8 @@ from app.models.creative import Creative
 from app.models.deal import Deal
 from app.models.escrow_payment import EscrowPayment
 from app.models.enums import DealStatus
-from app.services.deal_service import log_event, set_status
-from app.services.escrow_service import refund_payment, release_payment, scan_incoming_payments, sweep_deposit
+from app.services.deal_service import InvalidTransitionError, log_event, set_status
+from app.services.escrow_service import _lock_row, refund_payment, release_payment, scan_incoming_payments, sweep_deposit
 from app.services.telegram_service import copy_message, send_media, send_message
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,8 @@ def check_payment_timeouts() -> None:
                 set_status(deal, DealStatus.CANCELED)
                 log_event(db, deal.id, "PAYMENT_TIMEOUT")
                 logger.info("check_payment_timeouts: canceled deal_id=%s", deal.id)
+            except InvalidTransitionError:
+                logger.warning("check_payment_timeouts: transition skipped deal_id=%s status=%s", deal.id, deal.status)
             except Exception:
                 logger.exception("check_payment_timeouts: error canceling deal_id=%s", deal.id)
         db.commit()
@@ -86,6 +88,8 @@ def process_scheduled_posts() -> None:
                 set_status(deal, DealStatus.VERIFYING)
                 log_event(db, deal.id, "POSTED", {"message_id": message_id})
                 logger.info("process_scheduled_posts: posted deal_id=%s message_id=%s", deal.id, message_id)
+            except InvalidTransitionError:
+                logger.warning("process_scheduled_posts: transition skipped deal_id=%s status=%s", deal.id, deal.status)
             except Exception:
                 logger.exception("process_scheduled_posts: error posting deal_id=%s", deal.id)
         db.commit()
@@ -138,6 +142,14 @@ def check_verification_windows() -> None:
                 continue
             if now < start + timedelta(minutes=window):
                 continue
+            deal = _lock_row(db, Deal, Deal.id == deal.id)
+            payment = _lock_row(db, EscrowPayment, EscrowPayment.deal_id == deal.id)
+            if not deal or deal.status != DealStatus.VERIFYING:
+                continue
+            if not payment or not payment.tx_hash:
+                continue
+            if payment.release_tx_hash or payment.refund_tx_hash:
+                continue
             if deal.tampered or deal.deleted:
                 try:
                     refund_payment(db, deal, None, "verification_failed")
@@ -186,6 +198,10 @@ def sweep_completed_deposits() -> None:
         logger.info("sweep_completed_deposits: found %d payments", len(rows))
         for payment, deal in rows:
             try:
+                deal = _lock_row(db, Deal, Deal.id == deal.id)
+                payment = _lock_row(db, EscrowPayment, EscrowPayment.id == payment.id)
+                if not deal or not payment or payment.sweep_tx_hash:
+                    continue
                 sweep_deposit(db, deal, payment)
                 logger.info("sweep_completed_deposits: swept deal_id=%s", deal.id)
             except ValueError as exc:
