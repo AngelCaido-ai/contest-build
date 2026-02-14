@@ -11,6 +11,20 @@ A fully functional two-sided marketplace for Telegram channel advertising, built
 - Tamper and deletion detection via a dedicated watcher bot
 - TonConnect-powered payments in the Mini App
 
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Contest Requirements Coverage](#contest-requirements-coverage)
+- [Deal Lifecycle](#deal-lifecycle)
+- [Design Decisions](#design-decisions)
+- [Quick Start (Docker)](#quick-start-docker)
+- [Development Setup](#development-setup)
+- [Project Structure](#project-structure)
+- [Documentation](#documentation)
+- [Known Limitations](#known-limitations)
+- [Future Work](#future-work)
+
 ## Architecture
 
 ```mermaid
