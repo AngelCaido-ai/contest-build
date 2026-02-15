@@ -63,7 +63,7 @@ bot/
 5. Инициализирует singleton `httpx.AsyncClient` через `api_client.init_client()`.
 6. Запускает polling, при остановке закрывает клиент через `api_client.close_client()`.
 
-> Tamper detection (отслеживание правок постов) выполняется отдельным watcher-ботом — см. `docs/watcher.md`.
+> Tamper detection (отслеживание правок постов) выполняется отдельным watcher-ботом — см. [watcher.md](watcher.md).
 
 ---
 

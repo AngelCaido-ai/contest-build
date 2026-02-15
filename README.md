@@ -1,5 +1,9 @@
 # Telegram Ads Marketplace
 
+**Demo bot:** [@build_contest_ads_bot](https://t.me/build_contest_ads_bot) (needs to be made admin of the channel where ads will be published)
+
+**Watcher bot:** [@build_contest_ads_watcher_bot](https://t.me/build_contest_ads_watcher_bot) (must also be added as channel admin)
+
 A fully functional two-sided marketplace for Telegram channel advertising, built as a **Telegram Mini App + Bot** with on-chain **TON escrow**, automated post publishing, verified channel statistics, and tamper/deletion detection.
 
 **Key capabilities:**
@@ -300,7 +304,7 @@ contest-build/
 │       ├── hooks/              #   useApi, useTonConnect, ...
 │       ├── pages/              #   Listings, Requests, Deals, Channels, Payment, ...
 │       └── types/              #   TypeScript type definitions
-├── docs/                       # Documentation
+├── docs/                       # Documentation (RU/ and EN/)
 ├── docker-compose.yml          # All 8 services
 ├── Dockerfile                  # Python services (backend, bot, watcher, worker, scheduler)
 ├── requirements.txt            # Python dependencies
@@ -310,14 +314,16 @@ contest-build/
 
 ## Documentation
 
+Documentation is available in [docs/](docs/) in Russian (RU) and English (EN):
+
 | Document | Description |
 |---|---|
-| [docs/backend.md](docs/backend.md) | API endpoints, data models, services, escrow flow, background tasks, security |
-| [docs/bot.md](docs/bot.md) | Bot commands, FSM states, callback schemes, inline calendar, API client |
-| [docs/watcher.md](docs/watcher.md) | Watcher bot architecture and tamper detection mechanism |
-| [docs/flows.md](docs/flows.md) | End-to-end user flows (onboarding, deal creation, escrow, verification) |
-| [docs/test-cases.md](docs/test-cases.md) | Test cases for all major features |
-| [docs/deploy.md](docs/deploy.md) | Deployment guide |
+| [docs/RU/backend.md](docs/RU/backend.md) / [docs/EN/backend.md](docs/EN/backend.md) | API endpoints, data models, services, escrow flow, background tasks, security |
+| [docs/RU/bot.md](docs/RU/bot.md) / [docs/EN/bot.md](docs/EN/bot.md) | Bot commands, FSM states, callback schemes, inline calendar, API client |
+| [docs/RU/watcher.md](docs/RU/watcher.md) / [docs/EN/watcher.md](docs/EN/watcher.md) | Watcher bot architecture and tamper detection mechanism |
+| [docs/RU/flows.md](docs/RU/flows.md) / [docs/EN/flows.md](docs/EN/flows.md) | End-to-end user flows (onboarding, deal creation, escrow, verification) |
+| [docs/RU/test-cases.md](docs/RU/test-cases.md) / [docs/EN/test-cases.md](docs/EN/test-cases.md) | Test cases for all major features |
+| [docs/RU/deploy.md](docs/RU/deploy.md) / [docs/EN/deploy.md](docs/EN/deploy.md) | Deployment guide |
 | [CHANGELOG.md](CHANGELOG.md) | Chronological development history with rationale for each change |
 
 ## Known Limitations
@@ -326,7 +332,7 @@ contest-build/
 - **MTProto session required for full stats** — without a Telethon session, only subscriber count is available (Bot API fallback)
 - **Watcher bot requires manual setup** — must be added as admin to each monitored channel separately
 - **No CI/CD pipeline** — builds and deployments are manual (Docker Compose based)
-- **No automated end-to-end tests** — test cases are documented in [docs/test-cases.md](docs/test-cases.md) for manual verification
+- **No automated end-to-end tests** — test cases are documented in [docs/RU/test-cases.md](docs/RU/test-cases.md) / [docs/EN/test-cases.md](docs/EN/test-cases.md) for manual verification
 
 ## Future Work
 

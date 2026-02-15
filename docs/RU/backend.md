@@ -635,7 +635,7 @@ scan_escrow_deposits → check_verification_windows → sweep_completed_deposits
 process_scheduled_posts → check_deleted_posts → check_payment_timeouts → sleep(20) → повтор
 ```
 
-> Tamper detection выполняется отдельным watcher-ботом (см. `docs/watcher.md`).
+> Tamper detection выполняется отдельным watcher-ботом (см. [watcher.md](watcher.md)).
 
 ---
 
