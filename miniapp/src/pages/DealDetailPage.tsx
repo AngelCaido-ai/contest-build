@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Text,
@@ -15,9 +15,12 @@ import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
 import { DealStatusBadge } from "../components/DealStatusBadge";
 import { DealEventTimeline } from "../components/DealEventTimeline";
+import { CollapsibleGroup } from "../components/CollapsibleGroup";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { FileUploadButton } from "../components/FileUploadButton";
 import type { DealDetail, DealStatus, MediaFileId } from "../types";
 import { useAuth } from "../contexts/AuthContext";
-import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
+import { DateTimePickerField, localInputToIso, isoToLocalInput } from "../components/DateTimePickerField";
 
 const BOT_URL = import.meta.env.VITE_BOT_URL || "https://t.me/build_contest_ads_bot";
 const CREATIVE_VIEW_STATUSES = new Set<DealStatus>([
@@ -49,6 +52,22 @@ const ROLE_ALLOWED_STATUSES: Record<"owner" | "advertiser", DealStatus[]> = {
   advertiser: ["AWAITING_PAYMENT", "FUNDED", "CANCELED"],
 };
 
+const STATUS_LABELS: Record<DealStatus, string> = {
+  NEGOTIATING: "Negotiating",
+  TERMS_LOCKED: "Terms Locked",
+  AWAITING_PAYMENT: "Awaiting Payment",
+  FUNDED: "Funded",
+  CREATIVE_DRAFT: "Creative Draft",
+  CREATIVE_REVIEW: "Creative Review",
+  APPROVED: "Approved",
+  SCHEDULED: "Scheduled",
+  POSTED: "Posted",
+  VERIFYING: "Verifying",
+  RELEASED: "Released",
+  REFUNDED: "Refunded",
+  CANCELED: "Canceled",
+};
+
 type CreativePayload = {
   id: number;
   version: number;
@@ -57,9 +76,15 @@ type CreativePayload = {
   status: string;
 };
 
+type ConfirmAction = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+};
+
 function getCta(status: DealStatus): { label: string; action: "pay" | "bot" | null } {
   switch (status) {
-    case "NEGOTIATING":
     case "TERMS_LOCKED":
       return { label: "Proceed to Payment", action: "pay" };
     case "AWAITING_PAYMENT":
@@ -123,10 +148,18 @@ export function DealDetailPage() {
   const [creativeData, setCreativeData] = useState<CreativePayload | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
-  const [showAllActions, setShowAllActions] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const fetcher = useCallback(() => apiFetch<DealDetail>(`/deals/${id}`), [id]);
   const { data: deal, loading, error, refetch } = useApi(fetcher, [id]);
+
+  useEffect(() => {
+    if (!deal) return;
+    if (deal.price != null) setTermsPrice(String(deal.price));
+    if (deal.format) setTermsFormat(deal.format);
+    if (deal.verification_window != null) setTermsWindow(String(deal.verification_window));
+    if (deal.publish_at) setTermsPublishAt(isoToLocalInput(deal.publish_at));
+  }, [deal]);
 
   if (loading) {
     return (
@@ -170,11 +203,14 @@ export function DealDetailPage() {
   ];
   const safeWizardStep = wizardSteps.length > 0 ? Math.min(wizardStep, wizardSteps.length - 1) : 0;
   const activeWizardStep = wizardSteps[safeWizardStep]?.key ?? null;
-  const isStepVisible = (key: string) => showAllActions || wizardSteps.length === 0 || activeWizardStep === key;
-  const statusOptions = allowedStatuses.map((item) => ({ value: item, label: item }));
+  const isStepVisible = (key: string) => wizardSteps.length === 0 || activeWizardStep === key;
+  const statusOptions = allowedStatuses.map((s) => ({
+    value: s,
+    label: STATUS_LABELS[s] ?? s,
+  }));
   const creativeStatusOptions = [
-    { value: "APPROVED", label: "APPROVED" },
-    { value: "DRAFT", label: "DRAFT" },
+    { value: "APPROVED", label: "Approve" },
+    { value: "DRAFT", label: "Request changes" },
   ];
 
   const channelTitle =
@@ -259,11 +295,23 @@ export function DealDetailPage() {
     });
   };
 
+  const handleLockTerms = () => {
+    setConfirmAction({
+      title: "Lock deal terms?",
+      description: "This will fix the price, format, and publish date. You won't be able to change them later.",
+      confirmLabel: "Lock Terms",
+      onConfirm: () => {
+        setConfirmAction(null);
+        submitTerms();
+      },
+    });
+  };
+
   const submitPublishAt = async () => {
     await withSubmitting(async () => {
       const publishAtIso = localInputToIso(publishAtValue);
       if (!publishAtIso) {
-        throw new Error("Please specify publish_at");
+        throw new Error("Please specify publish date");
       }
       await apiFetch(`/deals/${deal.id}/publish_at`, {
         method: "POST",
@@ -273,18 +321,47 @@ export function DealDetailPage() {
     });
   };
 
-  const submitStatus = async () => {
+  const submitStatus = async (selectedStatus?: string) => {
     await withSubmitting(async () => {
-      const selectedStatus = statusValue ?? allowedStatuses[0];
-      if (!selectedStatus) {
+      const target = selectedStatus ?? statusValue ?? allowedStatuses[0];
+      if (!target) {
         throw new Error("Select a status");
       }
       await apiFetch(`/deals/${deal.id}/status`, {
         method: "POST",
-        body: JSON.stringify({ status: selectedStatus }),
+        body: JSON.stringify({ status: target }),
       });
       showToast("Status updated", { type: "success" });
     });
+  };
+
+  const handleStatusUpdate = () => {
+    const target = statusValue ?? allowedStatuses[0];
+    if (!target) return;
+
+    const label = STATUS_LABELS[target as DealStatus] ?? target;
+
+    if (target === "CANCELED") {
+      setConfirmAction({
+        title: "Cancel this deal?",
+        description: "This action cannot be undone. The deal will be permanently canceled.",
+        confirmLabel: "Cancel Deal",
+        onConfirm: () => {
+          setConfirmAction(null);
+          submitStatus(target);
+        },
+      });
+    } else {
+      setConfirmAction({
+        title: `Change status to "${label}"?`,
+        description: `The deal status will be updated from ${STATUS_LABELS[status]} to ${label}.`,
+        confirmLabel: "Update Status",
+        onConfirm: () => {
+          setConfirmAction(null);
+          submitStatus(target);
+        },
+      });
+    }
   };
 
   const submitCreative = async () => {
@@ -350,8 +427,7 @@ export function DealDetailPage() {
     });
   };
 
-  const handleCreativeFile = async (file: File | null) => {
-    if (!file) return;
+  const handleCreativeFile = async (file: File) => {
     setCreativeUploading(true);
     try {
       const uploaded = await uploadMedia(file);
@@ -364,8 +440,7 @@ export function DealDetailPage() {
     }
   };
 
-  const handleBriefFile = async (file: File | null) => {
-    if (!file) return;
+  const handleBriefFile = async (file: File) => {
     setBriefUploading(true);
     try {
       const uploaded = await uploadMedia(file);
@@ -385,8 +460,11 @@ export function DealDetailPage() {
     });
   };
 
+  const hasActions = canEditTerms || canSetPublishAt || allowedStatuses.length > 0 || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative;
+
   return (
     <div className="flex flex-col gap-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <Text type="title2" weight="bold">
           Deal #{deal.id}
@@ -394,6 +472,7 @@ export function DealDetailPage() {
         <DealStatusBadge status={deal.status as DealStatus} />
       </div>
 
+      {/* Channel (compact) */}
       <Group header="Channel">
         <GroupItem
           text="Channel"
@@ -416,8 +495,8 @@ export function DealDetailPage() {
         />
       </Group>
 
+      {/* Key Details */}
       <Group header="Details">
-        <GroupItem text="Deal ID" after={<Text type="body">{deal.id}</Text>} />
         {deal.price != null && (
           <GroupItem text="Price" after={<Text type="body">${deal.price}</Text>} />
         )}
@@ -435,39 +514,46 @@ export function DealDetailPage() {
             </Text>
           }
         />
-        <GroupItem
-          text="Listing"
-          after={<Text type="body">{deal.listing_id ?? "—"}</Text>}
-        />
-        <GroupItem
-          text="Request"
-          after={<Text type="body">{deal.request_id ?? "—"}</Text>}
-        />
-        <GroupItem text="Created" after={<Text type="body">{formatDateTime(deal.created_at)}</Text>} />
-        <GroupItem text="Updated" after={<Text type="body">{formatDateTime(deal.updated_at)}</Text>} />
+        <CollapsibleGroup header="Show details">
+          <GroupItem text="Deal ID" after={<Text type="body">{deal.id}</Text>} />
+          <GroupItem
+            text="Listing"
+            after={<Text type="body">{deal.listing_id ?? "—"}</Text>}
+          />
+          <GroupItem
+            text="Request"
+            after={<Text type="body">{deal.request_id ?? "—"}</Text>}
+          />
+          <GroupItem text="Created" after={<Text type="body">{formatDateTime(deal.created_at)}</Text>} />
+          <GroupItem text="Updated" after={<Text type="body">{formatDateTime(deal.updated_at)}</Text>} />
+        </CollapsibleGroup>
       </Group>
 
-      <Group header="Publishing & Verification">
-        <GroupItem text="Publish (planned)" after={<Text type="body">{formatDate(deal.publish_at)}</Text>} />
-        <GroupItem text="Publish (actual)" after={<Text type="body">{formatDateTime(deal.posted_at)}</Text>} />
-        <GroupItem
-          text="Message ID"
-          after={<Text type="body">{deal.posted_message_id ?? "—"}</Text>}
-        />
-        <GroupItem
-          text="Verification window"
-          after={
-            <Text type="body">
-              {deal.verification_window != null ? `${deal.verification_window} min` : "—"}
-            </Text>
-          }
-        />
-        <GroupItem
-          text="Verification started"
-          after={<Text type="body">{formatDateTime(deal.verification_started_at)}</Text>}
-        />
+      {/* Publishing & Verification (collapsed) */}
+      <Group>
+        <CollapsibleGroup header="Publishing & Verification">
+          <GroupItem text="Publish (planned)" after={<Text type="body">{formatDate(deal.publish_at)}</Text>} />
+          <GroupItem text="Publish (actual)" after={<Text type="body">{formatDateTime(deal.posted_at)}</Text>} />
+          <GroupItem
+            text="Message ID"
+            after={<Text type="body">{deal.posted_message_id ?? "—"}</Text>}
+          />
+          <GroupItem
+            text="Verification window"
+            after={
+              <Text type="body">
+                {deal.verification_window != null ? `${deal.verification_window} min` : "—"}
+              </Text>
+            }
+          />
+          <GroupItem
+            text="Verification started"
+            after={<Text type="body">{formatDateTime(deal.verification_started_at)}</Text>}
+          />
+        </CollapsibleGroup>
       </Group>
 
+      {/* Brief */}
       {deal.brief && (
         <Group header="Brief">
           <div className="px-4 py-3">
@@ -478,173 +564,243 @@ export function DealDetailPage() {
         </Group>
       )}
 
-      {(canEditTerms || canSetPublishAt || allowedStatuses.length > 0 || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative) && (
+      {/* Actions */}
+      {hasActions && (
         <Text type="title3" weight="bold">
           Actions
         </Text>
       )}
 
+      {/* Visual Stepper */}
       {wizardSteps.length > 0 && (
-        <Group header="Step-by-Step Wizard">
-          <div className="flex flex-col gap-3 px-4 py-3">
-            <Text type="body">
-              Step {safeWizardStep + 1} of {wizardSteps.length}: {wizardSteps[safeWizardStep]?.title}
-            </Text>
-            <Text type="caption1" color="secondary">
-              {wizardSteps.map((step, index) => `${index + 1}. ${step.title}`).join("  |  ")}
-            </Text>
-            <div className="flex gap-2">
-              <Button
-                text="Back"
-                type="secondary"
-                disabled={safeWizardStep <= 0}
-                onClick={() => setWizardStep((prev) => Math.max(prev - 1, 0))}
-              />
-              <Button
-                text="Next"
-                type="secondary"
-                disabled={safeWizardStep >= wizardSteps.length - 1}
-                onClick={() => setWizardStep((prev) => Math.min(prev + 1, wizardSteps.length - 1))}
-              />
-            </div>
-            <Button
-              text={showAllActions ? "Show step by step" : "Show all sections"}
-              type="secondary"
-              onClick={() => setShowAllActions((prev) => !prev)}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center px-2">
+            {wizardSteps.map((step, index) => {
+              const isActive = index === safeWizardStep;
+              return (
+                <div key={step.key} className="flex flex-1 items-center">
+                  <button
+                    type="button"
+                    className="flex flex-col items-center gap-1"
+                    onClick={() => setWizardStep(index)}
+                  >
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors"
+                      style={{
+                        backgroundColor: isActive
+                          ? "var(--tg-theme-button-color, #3b82f6)"
+                          : "var(--tg-theme-secondary-bg-color, #2c2c2e)",
+                        color: isActive
+                          ? "var(--tg-theme-button-text-color, #fff)"
+                          : "var(--tg-theme-hint-color, #999)",
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+                    <Text
+                      type="caption1"
+                      color={isActive ? undefined : "secondary"}
+                      weight={isActive ? "medium" : undefined}
+                    >
+                      {step.title}
+                    </Text>
+                  </button>
+                  {index < wizardSteps.length - 1 && (
+                    <div
+                      className="mx-1 h-px flex-1"
+                      style={{
+                        backgroundColor: "var(--tg-theme-hint-color, #ccc)",
+                        opacity: 0.3,
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </Group>
+          <div className="flex justify-center gap-2">
+            <button
+              type="button"
+              className="px-3 py-1 text-xs rounded-lg"
+              style={{ color: safeWizardStep <= 0 ? "var(--tg-theme-hint-color, #666)" : "var(--tg-theme-link-color, #3b82f6)" }}
+              disabled={safeWizardStep <= 0}
+              onClick={() => setWizardStep((prev) => Math.max(prev - 1, 0))}
+            >
+              &larr; Back
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1 text-xs rounded-lg"
+              style={{ color: safeWizardStep >= wizardSteps.length - 1 ? "var(--tg-theme-hint-color, #666)" : "var(--tg-theme-link-color, #3b82f6)" }}
+              disabled={safeWizardStep >= wizardSteps.length - 1}
+              onClick={() => setWizardStep((prev) => Math.min(prev + 1, wizardSteps.length - 1))}
+            >
+              Next &rarr;
+            </button>
+          </div>
+        </div>
       )}
 
+      {/* Deal Terms */}
       {canEditTerms && isStepVisible("terms") && (
         <Group header="Deal Terms">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <Input
-              placeholder="Price"
-              type="text"
-              value={termsPrice}
-              onChange={(v) => setTermsPrice(v)}
-              numeric
-            />
-            <Input
-              placeholder="Format"
-              type="text"
-              value={termsFormat}
-              onChange={(v) => setTermsFormat(v)}
-            />
-            <DateTimePickerField value={termsPublishAt} onChange={setTermsPublishAt} />
-            <Input
-              placeholder="verification_window (min)"
-              type="text"
-              value={termsWindow}
-              onChange={(v) => setTermsWindow(v)}
-              numeric
-            />
-            <Button text="Lock Terms" type="primary" loading={submitting} onClick={submitTerms} />
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Price, $</Text>
+              <Input
+                placeholder="0.00"
+                type="text"
+                value={termsPrice}
+                onChange={(v) => setTermsPrice(v)}
+                numeric
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Format</Text>
+              <Input
+                placeholder="post, repost, story..."
+                type="text"
+                value={termsFormat}
+                onChange={(v) => setTermsFormat(v)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Publish date</Text>
+              <DateTimePickerField value={termsPublishAt} onChange={setTermsPublishAt} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Verification window, min</Text>
+              <Input
+                placeholder="10"
+                type="text"
+                value={termsWindow}
+                onChange={(v) => setTermsWindow(v)}
+                numeric
+              />
+            </div>
+            <Button text="Lock Terms" type="primary" loading={submitting} onClick={handleLockTerms} />
           </div>
         </Group>
       )}
 
+      {/* Publish Date */}
       {canSetPublishAt && isStepVisible("workflow") && (
         <Group header="Publish Date">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <DateTimePickerField value={publishAtValue} onChange={setPublishAtValue} allowEmpty={false} />
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Publish date</Text>
+              <DateTimePickerField value={publishAtValue} onChange={setPublishAtValue} allowEmpty={false} />
+            </div>
             <Button text="Update Date" type="secondary" loading={submitting} onClick={submitPublishAt} />
           </div>
         </Group>
       )}
 
+      {/* Status Change */}
       {allowedStatuses.length > 0 && isStepVisible("workflow") && (
         <Group header="Status Change">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <Select
-              options={statusOptions}
-              value={statusValue ?? (statusOptions.length > 0 ? statusOptions[0].value : null)}
-              onChange={(v) => setStatusValue(v)}
-            />
-            <Button text="Update Status" type="secondary" loading={submitting} onClick={submitStatus} />
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">New status</Text>
+              <Select
+                options={statusOptions}
+                value={statusValue ?? (statusOptions.length > 0 ? statusOptions[0].value : null)}
+                onChange={(v) => setStatusValue(v)}
+              />
+            </div>
+            <Button text="Update Status" type="secondary" loading={submitting} onClick={handleStatusUpdate} />
           </div>
         </Group>
       )}
 
+      {/* Creative */}
       {canCreateCreative && isStepVisible("creative") && (
         <Group header="Creative">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <textarea
-              className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
-              rows={4}
-              placeholder="Creative text"
-              value={creativeText}
-              onChange={(e) => setCreativeText(e.target.value)}
-            />
-            <input
-              type="file"
-              accept="image/*,video/*,.gif,.pdf,.doc,.docx,.txt"
-              onChange={(e) => handleCreativeFile(e.target.files?.[0] ?? null)}
-            />
-            {creativeMedia.length > 0 && (
-              <Text type="caption1" color="secondary">
-                Files: {creativeMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
-              </Text>
-            )}
-            {creativeUploading && (
-              <Text type="caption1" color="secondary">
-                Uploading file...
-              </Text>
-            )}
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Creative text</Text>
+              <textarea
+                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                rows={4}
+                placeholder="Enter the creative text for the post..."
+                value={creativeText}
+                onChange={(e) => setCreativeText(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Media files</Text>
+              <FileUploadButton
+                files={creativeMedia}
+                onChange={setCreativeMedia}
+                onUpload={handleCreativeFile}
+                uploading={creativeUploading}
+              />
+            </div>
             <Button text="Submit Creative" type="primary" loading={submitting} onClick={submitCreative} />
           </div>
         </Group>
       )}
 
+      {/* Creative Review */}
       {canReviewCreative && isStepVisible("review") && (
         <Group header="Creative Review">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <Select options={creativeStatusOptions} value={creativeStatus} onChange={(v) => setCreativeStatus(v)} />
-            <textarea
-              className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
-              rows={3}
-              placeholder="Comment for DRAFT"
-              value={creativeComment}
-              onChange={(e) => setCreativeComment(e.target.value)}
-            />
-            <DateTimePickerField value={creativePublishAt} onChange={setCreativePublishAt} />
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Decision</Text>
+              <Select options={creativeStatusOptions} value={creativeStatus} onChange={(v) => setCreativeStatus(v)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Comment</Text>
+              <textarea
+                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                rows={3}
+                placeholder="Revision notes or feedback..."
+                value={creativeComment}
+                onChange={(e) => setCreativeComment(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Publish date</Text>
+              <DateTimePickerField value={creativePublishAt} onChange={setCreativePublishAt} />
+            </div>
             <Button text="Submit Review" type="primary" loading={submitting} onClick={submitCreativeReview} />
           </div>
         </Group>
       )}
 
+      {/* Advertiser Brief */}
       {canSendBrief && isStepVisible("brief") && (
         <Group header="Advertiser Brief">
           <div className="flex flex-col gap-3 px-4 py-3">
-            <textarea
-              className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
-              rows={4}
-              placeholder="Post requirements, CTA, constraints"
-              value={briefText}
-              onChange={(e) => setBriefText(e.target.value)}
-            />
-            <DateTimePickerField value={briefPublishAt} onChange={setBriefPublishAt} />
-            <input
-              type="file"
-              accept="image/*,video/*,.gif,.pdf,.doc,.docx,.txt"
-              onChange={(e) => handleBriefFile(e.target.files?.[0] ?? null)}
-            />
-            {briefMedia.length > 0 && (
-              <Text type="caption1" color="secondary">
-                Files: {briefMedia.map((item) => `${item.type}:${item.file_id.slice(0, 10)}...`).join(", ")}
-              </Text>
-            )}
-            {briefUploading && (
-              <Text type="caption1" color="secondary">
-                Uploading file...
-              </Text>
-            )}
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Brief</Text>
+              <textarea
+                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                rows={4}
+                placeholder="Product, CTA, constraints..."
+                value={briefText}
+                onChange={(e) => setBriefText(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Preferred publish date</Text>
+              <DateTimePickerField value={briefPublishAt} onChange={setBriefPublishAt} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Text type="caption1" color="secondary">Attachments</Text>
+              <FileUploadButton
+                files={briefMedia}
+                onChange={setBriefMedia}
+                onUpload={handleBriefFile}
+                uploading={briefUploading}
+              />
+            </div>
             <Button text="Submit Brief" type="secondary" loading={submitting} onClick={submitBrief} />
           </div>
         </Group>
       )}
 
+      {/* View Creative */}
       {canViewCreative && isStepVisible("view") && (
         <Group header="View Creative">
           <div className="flex flex-col gap-3 px-4 py-3">
@@ -656,19 +812,33 @@ export function DealDetailPage() {
                 <Text type="body" color="secondary">
                   {creativeData.text || "No text"}
                 </Text>
-                <Text type="caption1" color="secondary">
-                  media_file_ids: {JSON.stringify(creativeData.media_file_ids ?? [])}
-                </Text>
+                {creativeData.media_file_ids && creativeData.media_file_ids.length > 0 && (
+                  <Text type="caption1" color="secondary">
+                    {creativeData.media_file_ids.length} media file(s) attached
+                  </Text>
+                )}
               </div>
             )}
           </div>
         </Group>
       )}
 
-      <Group header="Event History">
-        <DealEventTimeline dealId={deal.id} />
-      </Group>
+      {/* CTA (right after forms) */}
+      <div className="flex flex-col gap-2 pt-2">
+        {cta.action && (
+          <Button text={cta.label} type="primary" onClick={handleCta} />
+        )}
+        <button
+          type="button"
+          className="py-2 text-center text-sm"
+          style={{ color: "var(--tg-theme-link-color, #3b82f6)" }}
+          onClick={handleOpenBot}
+        >
+          Open Bot
+        </button>
+      </div>
 
+      {/* Tampered / Deleted warnings */}
       {deal.tampered && (
         <Group>
           <div className="px-4 py-3">
@@ -689,16 +859,20 @@ export function DealDetailPage() {
         </Group>
       )}
 
-      <div className="flex flex-col gap-2 pt-2">
-        {cta.action && (
-          <Button text={cta.label} type="primary" onClick={handleCta} />
-        )}
-        <Button
-          text="Open Bot"
-          type="secondary"
-          onClick={handleOpenBot}
-        />
-      </div>
+      {/* Event History (bottom) */}
+      <Group header="Event History">
+        <DealEventTimeline dealId={deal.id} />
+      </Group>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction?.title ?? ""}
+        description={confirmAction?.description}
+        confirmLabel={confirmAction?.confirmLabel}
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

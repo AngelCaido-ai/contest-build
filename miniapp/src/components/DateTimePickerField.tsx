@@ -1,6 +1,6 @@
 import { Text } from "@telegram-tools/ui-kit";
 
-function toLocalInputValue(date: Date): string {
+export function toLocalInputValue(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   const year = date.getFullYear();
   const month = pad(date.getMonth() + 1);
@@ -10,12 +10,31 @@ function toLocalInputValue(date: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+export function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return toLocalInputValue(d);
+}
+
 export function localInputToIso(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function formatSelectedDate(value: string): string | null {
+  if (!value.trim()) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 type DateTimePickerFieldProps = {
@@ -45,6 +64,8 @@ export function DateTimePickerField({ value, onChange, allowEmpty = true }: Date
     return date;
   };
 
+  const selectedLabel = formatSelectedDate(value);
+
   return (
     <div className="flex flex-col gap-2">
       <input
@@ -56,35 +77,35 @@ export function DateTimePickerField({ value, onChange, allowEmpty = true }: Date
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
           onClick={() => applyPreset(inHours(1))}
         >
           In 1h
         </button>
         <button
           type="button"
-          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
           onClick={() => applyPreset(inHours(3))}
         >
           In 3h
         </button>
         <button
           type="button"
-          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
           onClick={() => applyPreset(inHours(6))}
         >
           In 6h
         </button>
         <button
           type="button"
-          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
           onClick={() => applyPreset(tomorrowAt(12, 0))}
         >
           Tomorrow 12:00
         </button>
         <button
           type="button"
-          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+          className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
           onClick={() => applyPreset(tomorrowAt(18, 0))}
         >
           Tomorrow 18:00
@@ -92,16 +113,20 @@ export function DateTimePickerField({ value, onChange, allowEmpty = true }: Date
         {allowEmpty && (
           <button
             type="button"
-            className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-2 py-1 text-xs"
+            className="rounded-lg border border-[var(--tg-theme-hint-color,#ccc)] px-3 py-1.5 text-xs"
             onClick={() => onChange("")}
           >
             Clear
           </button>
         )}
       </div>
-      <Text type="caption1" color="secondary">
-        You can pick a date and time or use quick buttons.
-      </Text>
+      {selectedLabel && (
+        <Text type="caption1" color="secondary">
+          <span style={{ color: "var(--tg-theme-link-color, #4ade80)" }}>
+            Selected: {selectedLabel}
+          </span>
+        </Text>
+      )}
     </div>
   );
 }
