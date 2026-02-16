@@ -49,7 +49,7 @@ def _is_job_active(job_id: str) -> bool:
 
 
 def main() -> None:
-    logger.info("scheduler started, %d tasks every 20s", len(TASKS))
+    logger.info("scheduler started, %d tasks every 60s", len(TASKS))
     while True:
         for task in TASKS:
             job_id = task.__name__
@@ -64,7 +64,7 @@ def main() -> None:
                 )
             except Exception:
                 logger.debug("skip enqueue %s (duplicate or error)", job_id)
-        time.sleep(20)
+        time.sleep(60)
 
 
 if __name__ == "__main__":

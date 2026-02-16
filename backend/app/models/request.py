@@ -1,9 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+TZDateTime = DateTime(timezone=True)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Request(Base):
@@ -18,4 +24,4 @@ class Request(Base):
     min_views: Mapped[int | None] = mapped_column(Integer, nullable=True)
     dates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     brief: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=_utcnow)

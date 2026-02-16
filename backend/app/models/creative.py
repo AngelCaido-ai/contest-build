@@ -1,10 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models.enums import CreativeStatus
+
+TZDateTime = DateTime(timezone=True)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Creative(Base):
@@ -16,4 +22,4 @@ class Creative(Base):
     media_file_ids: Mapped[list[dict] | list[str] | None] = mapped_column(JSON, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     status: Mapped[CreativeStatus] = mapped_column(Enum(CreativeStatus), default=CreativeStatus.DRAFT, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=_utcnow)

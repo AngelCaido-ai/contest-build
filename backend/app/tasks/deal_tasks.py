@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,7 @@ def check_payment_timeouts() -> None:
     logger.info("check_payment_timeouts: start")
     db: Session = SessionLocal()
     try:
-        cutoff = datetime.utcnow() - timedelta(minutes=settings.payment_timeout_minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.payment_timeout_minutes)
         deals = db.query(Deal).filter(Deal.status == DealStatus.AWAITING_PAYMENT, Deal.updated_at < cutoff).all()
         logger.info("check_payment_timeouts: found %d expired deals", len(deals))
         for deal in deals:
@@ -57,7 +57,7 @@ def process_scheduled_posts() -> None:
     logger.info("process_scheduled_posts: start")
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         deals = (
             db.query(Deal)
             .filter(Deal.status.in_([DealStatus.APPROVED, DealStatus.SCHEDULED]), Deal.publish_at <= now)
@@ -132,7 +132,7 @@ def check_verification_windows() -> None:
     logger.info("check_verification_windows: start")
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         deals = db.query(Deal).filter(Deal.status == DealStatus.VERIFYING).all()
         logger.info("check_verification_windows: checking %d deals", len(deals))
         for deal in deals:
@@ -180,7 +180,7 @@ def sweep_completed_deposits() -> None:
     logger.info("sweep_completed_deposits: start")
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(minutes=settings.sweep_delay_minutes)
         rows = (
             db.query(EscrowPayment, Deal)

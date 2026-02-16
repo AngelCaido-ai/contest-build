@@ -1,9 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+TZDateTime = DateTime(timezone=True)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class EscrowPayment(Base):
@@ -16,13 +22,13 @@ class EscrowPayment(Base):
     deposit_key: Mapped[str | None] = mapped_column(String, nullable=True)
     expected_amount: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
     tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     release_tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     refund_tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     sweep_tx_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     payout_address: Mapped[str | None] = mapped_column(String, nullable=True)
     refund_address: Mapped[str | None] = mapped_column(String, nullable=True)
-    released_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    refunded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    swept_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    released_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    refunded_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    swept_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=_utcnow)

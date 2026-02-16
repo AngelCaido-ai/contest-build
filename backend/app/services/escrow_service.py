@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -73,7 +73,7 @@ def confirm_payment(db: Session, deal: Deal, payment: EscrowPayment, tx_hash: st
         return payment
     try:
         payment.tx_hash = tx_hash
-        payment.confirmed_at = datetime.utcnow()
+        payment.confirmed_at = datetime.now(timezone.utc)
         set_status(deal, DealStatus.FUNDED)
         log_event(db, deal.id, "ESCROW_FUNDED", {"tx_hash": tx_hash})
         db.commit()
@@ -146,7 +146,7 @@ def release_payment(db: Session, deal: Deal, payout_address: str | None) -> Escr
         tx_hash = ton_escrow.send_payout(deposit_key, payout_address, deal.price)
         payment.payout_address = payout_address
         payment.release_tx_hash = tx_hash
-        payment.released_at = datetime.utcnow()
+        payment.released_at = datetime.now(timezone.utc)
         set_status(deal, DealStatus.RELEASED)
         log_event(db, deal.id, "ESCROW_RELEASED", {"tx_hash": tx_hash})
         db.commit()
@@ -187,7 +187,7 @@ def refund_payment(db: Session, deal: Deal, refund_address: str | None, reason: 
         tx_hash = ton_escrow.send_refund(deposit_key, refund_address, deal.price)
         payment.refund_address = refund_address
         payment.refund_tx_hash = tx_hash
-        payment.refunded_at = datetime.utcnow()
+        payment.refunded_at = datetime.now(timezone.utc)
         set_status(deal, DealStatus.REFUNDED)
         payload = {"tx_hash": tx_hash}
         if reason:
@@ -234,7 +234,7 @@ def sweep_deposit(db: Session, deal: Deal, payment: EscrowPayment) -> EscrowPaym
         else:
             payment.sweep_tx_hash = "SKIPPED_LOW_BALANCE"
             log_event(db, deal.id, "ESCROW_SWEEP_SKIPPED", {"reason": "low_balance"})
-        payment.swept_at = datetime.utcnow()
+        payment.swept_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(payment)
         logger.info("sweep_deposit: success deal_id=%s tx_hash=%s", deal.id, tx_hash)

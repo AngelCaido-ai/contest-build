@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -69,7 +69,7 @@ def refresh_stats(
     existing.reactions_per_post_prev = parsed.get("reactions_per_post_prev")
     existing.languages_json = parsed.get("languages") if raw else None
     existing.premium_json = raw.get("premium_graph") if raw else None
-    existing.updated_at = datetime.utcnow()
+    existing.updated_at = datetime.now(timezone.utc)
     existing.source = source
     db.commit()
     db.refresh(existing)

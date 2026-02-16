@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request as FastAPIRequest, status
 from sqlalchemy import or_
@@ -812,7 +812,7 @@ def bot_create_test_deal(
     )
     db.add(listing)
     db.flush()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     deal = Deal(
         listing_id=listing.id,
         advertiser_id=user.id,

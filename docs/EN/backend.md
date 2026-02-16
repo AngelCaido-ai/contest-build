@@ -33,7 +33,8 @@ backend/
 │       ├── 0004_deal_brief.py
 │       ├── 0005_user_tg_username.py
 │       ├── 0006_sweep_fields.py
-│       └── 0007_extended_channel_stats.py
+│       ├── 0007_extended_channel_stats.py
+│       └── 0008_datetime_timezone_aware.py
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                    # FastAPI entry point
@@ -682,6 +683,7 @@ process_scheduled_posts → check_deleted_posts → check_payment_timeouts → s
 | `0005_user_tg_username` | Added `tg_username` to users |
 | `0006_sweep_fields` | Added `sweep_tx_hash`, `swept_at` for escrow sweep remainders |
 | `0007_extended_channel_stats` | Extended channel stats: `shares_per_post`, `reactions_per_post`, `enabled_notifications`, `*_prev` fields for trends |
+| `0008_datetime_timezone_aware` | All DateTime columns converted to `TIMESTAMP WITH TIME ZONE` for correct timezone-aware serialization |
 
 ---
 
