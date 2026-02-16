@@ -672,9 +672,9 @@ export function DealDetailPage() {
               <Text type="caption1" color="secondary">Verification window, min</Text>
               <Input
                 placeholder="10"
-                type="text"
+                type="number"
                 value={termsWindow}
-                onChange={(v) => setTermsWindow(v)}
+                onChange={(v) => setTermsWindow(v.replace(/[^0-9]/g, ""))}
                 numeric
               />
             </div>
