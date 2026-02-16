@@ -327,13 +327,9 @@ Documentation is available in [docs/](docs/) in Russian (RU) and English (EN):
 | [docs/RU/flows.md](docs/RU/flows.md) / [docs/EN/flows.md](docs/EN/flows.md) | End-to-end user flows (onboarding, deal creation, escrow, verification) |
 | [docs/RU/test-cases.md](docs/RU/test-cases.md) / [docs/EN/test-cases.md](docs/EN/test-cases.md) | Test cases for all major features |
 | [docs/RU/deploy.md](docs/RU/deploy.md) / [docs/EN/deploy.md](docs/EN/deploy.md) | Deployment guide |
-| [CHANGELOG.md](CHANGELOG.md) | Chronological development history with rationale for each change |
 
 ## Known Limitations
 
-- **TON testnet only** — escrow wallets operate on TON testnet; switching to mainnet requires updating `TON_NETWORK` and `TON_API_URL`
-- **MTProto session required for full stats** — without a Telethon session, only subscriber count is available (Bot API fallback)
-- **Watcher bot requires manual setup** — must be added as admin to each monitored channel separately
 - **No CI/CD pipeline** — builds and deployments are manual (Docker Compose based)
 - **No automated end-to-end tests** — test cases are documented in [docs/RU/test-cases.md](docs/RU/test-cases.md) / [docs/EN/test-cases.md](docs/EN/test-cases.md) for manual verification
 
