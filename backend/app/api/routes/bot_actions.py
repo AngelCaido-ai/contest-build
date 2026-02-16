@@ -50,8 +50,10 @@ from app.services.deal_actions import (
     do_update_publish_at,
     do_update_status,
     do_update_terms,
+    format_deal_terms,
     get_deal_role,
     get_deal_role_flags,
+    notify_deal_parties,
 )
 from app.services.deal_service import InvalidTransitionError, log_event
 from app.services.escrow_service import create_deposit
@@ -444,6 +446,12 @@ def bot_create_deal(payload: BotDealCreate, db: Session = Depends(get_db)) -> De
         log_event(db, deal.id, "DEAL_CREATED")
         db.commit()
         logger.info("bot_create_deal: success deal_id=%s", deal.id)
+        terms_text = format_deal_terms(deal)
+        if deal.request_id:
+            notify_text = f"Deal #{deal.id}: new response to request #{deal.request_id}.\n\n{terms_text}"
+        else:
+            notify_text = f"Deal #{deal.id}: new response to listing #{deal.listing_id}.\n\n{terms_text}"
+        notify_deal_parties(db, deal, notify_text)
         return DealOut.model_validate(deal)
     except HTTPException:
         raise

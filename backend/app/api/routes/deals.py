@@ -36,7 +36,9 @@ from app.services.deal_actions import (
     do_update_publish_at,
     do_update_status,
     do_update_terms,
+    format_deal_terms,
     get_deal_role_flags,
+    notify_deal_parties,
 )
 from app.services.deal_service import InvalidTransitionError, log_event
 from app.services.telegram_service import upload_media_for_user
@@ -121,6 +123,12 @@ def create_deal(
         log_event(db, deal.id, "DEAL_CREATED")
         db.commit()
         logger.info("create_deal: success deal_id=%s user_id=%s", deal.id, user.id)
+        terms_text = format_deal_terms(deal)
+        if deal.request_id:
+            notify_text = f"Deal #{deal.id}: new response to request #{deal.request_id}.\n\n{terms_text}"
+        else:
+            notify_text = f"Deal #{deal.id}: new response to listing #{deal.listing_id}.\n\n{terms_text}"
+        notify_deal_parties(db, deal, notify_text)
         return DealOut.model_validate(deal)
     except HTTPException:
         raise
