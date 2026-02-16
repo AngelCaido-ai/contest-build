@@ -93,7 +93,7 @@ def create_deal(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         advertiser_id = user.id
         channel_id = channel.id
-        payload.price = listing.price_usd
+        payload.price = listing.price_usd if listing.price_usd is not None else listing.price_ton
     else:
         request_item = db.get(Request, payload.request_id)
         if not request_item:

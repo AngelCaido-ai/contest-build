@@ -443,7 +443,7 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| `POST` | `/deals/` | Create deal (from listing or request); 409 with `deal_id` if active deal exists for listing or for request+channel | JWT |
+| `POST` | `/deals/` | Create deal (from listing or request); 409 with `deal_id` if active deal exists for listing or for request+channel. For listings the price is taken from `price_usd` (priority) or `price_ton` (fallback); the user cannot override it | JWT |
 | `GET` | `/deals/` | List current user deals (pagination: `limit`, `offset`) | JWT |
 | `GET` | `/deals/{id}` | Get deal | JWT (participant) |
 | `GET` | `/deals/{id}/events` | Deal event history (newest first) | JWT (participant) |
