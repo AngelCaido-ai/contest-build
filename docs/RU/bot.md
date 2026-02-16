@@ -94,8 +94,8 @@ bot/
 | `/menu`              | Главное inline-меню                                    |
 | `/wallet`            | Установка TON-кошелька для выплат                      |
 | `/cancel`            | Отмена текущего FSM-потока                             |
-| `/listings`          | Список листингов                                       |
-| `/requests`          | Список заявок рекламодателей                           |
+| `/listings`          | Список листингов (с пагинацией, 8 на странице)         |
+| `/requests`          | Список заявок рекламодателей (с пагинацией, 8 на странице) |
 | `/channels`          | Список своих каналов                                   |
 | `/assigned_channels` | Каналы, где пользователь — менеджер (не владелец)      |
 | `/create_listing`    | Создание листинга (FSM или одной командой)             |
@@ -310,10 +310,10 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 | `list_channel_managers`  | GET            | `/channels/{id}/managers`             | Список менеджеров канала         |
 | `add_channel_manager`    | POST           | `/channels/{id}/managers`             | Добавить менеджера               |
 | `remove_channel_manager` | DELETE         | `/channels/{id}/managers/{mid}`       | Удалить менеджера                |
-| `list_listings`          | GET            | `/listings`                           | Список листингов                 |
+| `list_listings`          | GET            | `/listings`                           | Список листингов (`limit`, `offset`) |
 | `get_listing`            | GET            | `/listings/{id}`                      | Детали листинга                  |
 | `create_listing`         | POST           | `/bot/listings`                       | Создать листинг                  |
-| `list_requests`          | GET            | `/requests`                           | Список заявок                    |
+| `list_requests`          | GET            | `/requests`                           | Список заявок (`limit`, `offset`) |
 | `get_request`            | GET            | `/requests/{id}`                      | Детали заявки                    |
 | `create_request`         | POST           | `/bot/requests`                       | Создать заявку                   |
 | `list_deals`             | GET            | `/bot/deals`                          | Список сделок (с фильтрами)     |

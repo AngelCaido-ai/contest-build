@@ -94,8 +94,8 @@ Main handler for navigation and CRUD. Contains:
 | `/menu` | Main inline menu |
 | `/wallet` | Set TON wallet for payouts |
 | `/cancel` | Cancel current FSM flow |
-| `/listings` | List listings |
-| `/requests` | List advertiser requests |
+| `/listings` | List listings (paginated, 8 per page) |
+| `/requests` | List advertiser requests (paginated, 8 per page) |
 | `/channels` | List own channels |
 | `/assigned_channels` | Channels where user is manager (not owner) |
 | `/create_listing` | Create listing (FSM or single command) |
@@ -310,10 +310,10 @@ Async HTTP client on `httpx.AsyncClient`. Singleton created at bot start (`init_
 | `list_channel_managers` | GET | `/channels/{id}/managers` | List channel managers |
 | `add_channel_manager` | POST | `/channels/{id}/managers` | Add manager |
 | `remove_channel_manager` | DELETE | `/channels/{id}/managers/{mid}` | Remove manager |
-| `list_listings` | GET | `/listings` | List listings |
+| `list_listings` | GET | `/listings` | List listings (`limit`, `offset`) |
 | `get_listing` | GET | `/listings/{id}` | Listing details |
 | `create_listing` | POST | `/bot/listings` | Create listing |
-| `list_requests` | GET | `/requests` | List requests |
+| `list_requests` | GET | `/requests` | List requests (`limit`, `offset`) |
 | `get_request` | GET | `/requests/{id}` | Request details |
 | `create_request` | POST | `/bot/requests` | Create request |
 | `list_deals` | GET | `/bot/deals` | List deals (with filters) |

@@ -8,9 +8,9 @@ import {
   GroupItem,
   SkeletonElement,
 } from "@telegram-tools/ui-kit";
-import { apiFetch } from "../api/client";
-import { useApi } from "../hooks/useApi";
+import { usePaginatedApi } from "../hooks/usePaginatedApi";
 import { EmptyState } from "../components/EmptyState";
+import { Pagination } from "../components/Pagination";
 import type { Listing } from "../types";
 
 export function ListingsPage() {
@@ -19,17 +19,36 @@ export function ListingsPage() {
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
 
-  const fetcher = useCallback(() => {
-    const params = new URLSearchParams();
-    if (priceMin) params.set("price_min", priceMin);
-    if (priceMax) params.set("price_max", priceMax);
-    params.set("active", "true");
-    params.set("exclude_own", "true");
-    const qs = params.toString();
-    return apiFetch<Listing[]>(`/listings${qs ? `?${qs}` : ""}`);
-  }, [priceMin, priceMax]);
+  const buildUrl = useCallback(
+    (limit: number, offset: number) => {
+      const params = new URLSearchParams();
+      if (priceMin) params.set("price_min", priceMin);
+      if (priceMax) params.set("price_max", priceMax);
+      params.set("active", "true");
+      params.set("exclude_own", "true");
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return `/listings?${params.toString()}`;
+    },
+    [priceMin, priceMax],
+  );
 
-  const { data: listings, loading, error, refetch } = useApi(fetcher, [priceMin, priceMax]);
+  const {
+    data: listings,
+    loading,
+    error,
+    page,
+    hasMore,
+    nextPage,
+    prevPage,
+    resetPage,
+    refetch,
+  } = usePaginatedApi<Listing>(buildUrl, [priceMin, priceMax]);
+
+  const handleApply = () => {
+    resetPage();
+    refetch();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,7 +79,7 @@ export function ListingsPage() {
           </div>
         </div>
         <div className="px-4 pb-3">
-          <Button text="Apply" type="secondary" onClick={refetch} />
+          <Button text="Apply" type="secondary" onClick={handleApply} />
         </div>
       </Group>
 
@@ -105,6 +124,8 @@ export function ListingsPage() {
           ))}
         </Group>
       )}
+
+      {!loading && <Pagination page={page} hasMore={hasMore} onPrev={prevPage} onNext={nextPage} />}
     </div>
   );
 }

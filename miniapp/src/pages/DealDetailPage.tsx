@@ -84,6 +84,42 @@ function getCta(status: DealStatus): { label: string; action: "pay" | "bot" | nu
   }
 }
 
+function getWaitingHint(
+  status: DealStatus,
+  role: "owner" | "advertiser",
+): string | null {
+  if (role === "advertiser") {
+    switch (status) {
+      case "NEGOTIATING":
+        return "Waiting for the channel owner to set deal terms";
+      case "FUNDED":
+      case "CREATIVE_DRAFT":
+        return "Waiting for the channel owner to prepare the creative";
+      case "APPROVED":
+        return "Waiting for the channel owner to schedule the post";
+      case "SCHEDULED":
+        return "The post is scheduled, waiting for publication";
+      case "POSTED":
+      case "VERIFYING":
+        return "Verification in progress";
+      default:
+        return null;
+    }
+  }
+  if (role === "owner") {
+    switch (status) {
+      case "TERMS_LOCKED":
+      case "AWAITING_PAYMENT":
+        return "Waiting for the advertiser to pay";
+      case "CREATIVE_REVIEW":
+        return "Waiting for the advertiser to review the creative";
+      default:
+        return null;
+    }
+  }
+  return null;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
   const d = new Date(value);
@@ -181,6 +217,7 @@ export function DealDetailPage() {
   const safeWizardStep = wizardSteps.length > 0 ? Math.min(wizardStep, wizardSteps.length - 1) : 0;
   const activeWizardStep = wizardSteps[safeWizardStep]?.key ?? null;
   const isStepVisible = (key: string) => wizardSteps.length === 0 || activeWizardStep === key;
+  const waitingHint = getWaitingHint(status, role);
   const creativeStatusOptions = [
     { value: "APPROVED", label: "Approve" },
     { value: "DRAFT", label: "Request changes" },
@@ -390,8 +427,6 @@ export function DealDetailPage() {
     });
   };
 
-  const hasActions = canEditTerms || canSetPublishAt || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative;
-
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -493,83 +528,21 @@ export function DealDetailPage() {
           </div>
         </Group>
       )}
-
-      {/* Actions */}
-      {hasActions && (
-        <Text type="title3" weight="bold">
-          Actions
-        </Text>
-      )}
-
-      {/* Visual Stepper */}
-      {wizardSteps.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center px-2">
-            {wizardSteps.map((step, index) => {
-              const isActive = index === safeWizardStep;
-              return (
-                <div key={step.key} className="flex flex-1 items-center">
-                  <button
-                    type="button"
-                    className="flex flex-col items-center gap-1"
-                    onClick={() => setWizardStep(index)}
-                  >
-                    <div
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors"
-                      style={{
-                        backgroundColor: isActive
-                          ? "var(--tg-theme-button-color, #3b82f6)"
-                          : "var(--tg-theme-secondary-bg-color, #2c2c2e)",
-                        color: isActive
-                          ? "var(--tg-theme-button-text-color, #fff)"
-                          : "var(--tg-theme-hint-color, #999)",
-                      }}
-                    >
-                      {index + 1}
-                    </div>
-                    <Text
-                      type="caption1"
-                      color={isActive ? undefined : "secondary"}
-                      weight={isActive ? "medium" : undefined}
-                    >
-                      {step.title}
-                    </Text>
-                  </button>
-                  {index < wizardSteps.length - 1 && (
-                    <div
-                      className="mx-1 h-px flex-1"
-                      style={{
-                        backgroundColor: "var(--tg-theme-hint-color, #ccc)",
-                        opacity: 0.3,
-                      }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-center gap-2">
-            <button
-              type="button"
-              className="px-3 py-1 text-xs rounded-lg"
-              style={{ color: safeWizardStep <= 0 ? "var(--tg-theme-hint-color, #666)" : "var(--tg-theme-link-color, #3b82f6)" }}
-              disabled={safeWizardStep <= 0}
-              onClick={() => setWizardStep((prev) => Math.max(prev - 1, 0))}
-            >
-              &larr; Back
-            </button>
-            <button
-              type="button"
-              className="px-3 py-1 text-xs rounded-lg"
-              style={{ color: safeWizardStep >= wizardSteps.length - 1 ? "var(--tg-theme-hint-color, #666)" : "var(--tg-theme-link-color, #3b82f6)" }}
-              disabled={safeWizardStep >= wizardSteps.length - 1}
-              onClick={() => setWizardStep((prev) => Math.min(prev + 1, wizardSteps.length - 1))}
-            >
-              Next &rarr;
-            </button>
-          </div>
+      {/* Waiting hint */}
+      {waitingHint && (
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3"
+          style={{
+            backgroundColor: "var(--tg-theme-secondary-bg-color, #2c2c2e)",
+          }}
+        >
+          <span className="text-base leading-none" aria-hidden>&#9202;</span>
+          <Text type="body" color="secondary">
+            {waitingHint}
+          </Text>
         </div>
       )}
+
 
       {/* Deal Terms */}
       {canEditTerms && isStepVisible("terms") && (
@@ -633,7 +606,7 @@ export function DealDetailPage() {
             <div className="flex flex-col gap-1">
               <Text type="caption1" color="secondary">Creative text</Text>
               <textarea
-                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                className="w-full text-sm"
                 rows={4}
                 placeholder="Enter the creative text for the post..."
                 value={creativeText}
@@ -665,7 +638,7 @@ export function DealDetailPage() {
             <div className="flex flex-col gap-1">
               <Text type="caption1" color="secondary">Comment</Text>
               <textarea
-                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                className="w-full text-sm"
                 rows={3}
                 placeholder="Revision notes or feedback..."
                 value={creativeComment}
@@ -688,7 +661,7 @@ export function DealDetailPage() {
             <div className="flex flex-col gap-1">
               <Text type="caption1" color="secondary">Brief</Text>
               <textarea
-                className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+                className="w-full text-sm"
                 rows={4}
                 placeholder="Product, CTA, constraints..."
                 value={briefText}

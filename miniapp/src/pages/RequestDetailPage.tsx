@@ -266,7 +266,7 @@ export function RequestDetailPage() {
             numeric
           />
           <textarea
-            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            className="w-full text-sm"
             rows={4}
             placeholder="Comment/deal terms"
             value={brief}

@@ -111,3 +111,11 @@
 
 ### docs
 - Updated `bot.md` (RU/EN): removed `/status` command, `DealStatusState`, status callback prefixes, and role-based transition section.
+
+### miniapp
+- Added waiting-status hint banner in `DealDetailPage`: when the other party must act next, a contextual message is shown (e.g. "Waiting for the channel owner to set deal terms" for the advertiser in NEGOTIATING status). Covers both advertiser and owner waiting states across the full deal lifecycle.
+- Improved form input visibility: added global CSS styles for all text inputs, textareas, and selects — secondary background (`--tg-theme-secondary-bg-color`) and border (`--tg-theme-hint-color`) so inputs no longer blend with block backgrounds. Focus state highlights border with link color. Removed redundant inline Tailwind styles from `DealDetailPage`, `ListingDetailPage`, `RequestDetailPage`, `CreateRequestPage`, and `DateTimePickerField`.
+- Added pagination to all list endpoints and UIs:
+  - Backend: `GET /deals`, `GET /listings`, `GET /requests` (miniapp) and `GET /bot/listings`, `GET /bot/requests` (bot) now accept `limit` (1-50, default 20) and `offset` (default 0) query parameters with `order_by` sorting.
+  - Bot: `list_listings` and `list_requests` API client methods now accept `limit`/`offset`. Bot handlers `_send_listings` and `_send_requests` use paginated fetching (8 per page) with Prev/Next inline keyboard buttons. Added `listings_page:` and `requests_page:` callback handlers.
+  - Miniapp: Added `usePaginatedApi` hook (fetches PAGE_SIZE+1 to detect hasMore) and `Pagination` component. `DealsPage`, `ListingsPage`, and `RequestsPage` now paginate (20 per page) with Previous/Next buttons.

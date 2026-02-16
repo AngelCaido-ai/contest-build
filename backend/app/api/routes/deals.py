@@ -153,6 +153,8 @@ def create_deal(
 
 @router.get("/", response_model=list[DealOut])
 def list_deals(
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[DealOut]:
@@ -162,6 +164,9 @@ def list_deals(
     items = (
         db.query(Deal)
         .filter(or_(Deal.advertiser_id == user.id, Deal.channel_id.in_(channel_ids)))
+        .order_by(Deal.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [DealOut.model_validate(item) for item in items]

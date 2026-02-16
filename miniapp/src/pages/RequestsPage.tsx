@@ -8,9 +8,9 @@ import {
   GroupItem,
   SkeletonElement,
 } from "@telegram-tools/ui-kit";
-import { apiFetch } from "../api/client";
-import { useApi } from "../hooks/useApi";
+import { usePaginatedApi } from "../hooks/usePaginatedApi";
 import { EmptyState } from "../components/EmptyState";
+import { Pagination } from "../components/Pagination";
 import type { RequestItem } from "../types";
 
 export function RequestsPage() {
@@ -19,15 +19,34 @@ export function RequestsPage() {
   const [budgetMin, setBudgetMin] = useState("");
   const [budgetMax, setBudgetMax] = useState("");
 
-  const fetcher = useCallback(() => {
-    const params = new URLSearchParams();
-    if (budgetMin) params.set("budget_min", budgetMin);
-    if (budgetMax) params.set("budget_max", budgetMax);
-    const qs = params.toString();
-    return apiFetch<RequestItem[]>(`/requests${qs ? `?${qs}` : ""}`);
-  }, [budgetMin, budgetMax]);
+  const buildUrl = useCallback(
+    (limit: number, offset: number) => {
+      const params = new URLSearchParams();
+      if (budgetMin) params.set("budget_min", budgetMin);
+      if (budgetMax) params.set("budget_max", budgetMax);
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return `/requests?${params.toString()}`;
+    },
+    [budgetMin, budgetMax],
+  );
 
-  const { data: requests, loading, error, refetch } = useApi(fetcher, [budgetMin, budgetMax]);
+  const {
+    data: requests,
+    loading,
+    error,
+    page,
+    hasMore,
+    nextPage,
+    prevPage,
+    resetPage,
+    refetch,
+  } = usePaginatedApi<RequestItem>(buildUrl, [budgetMin, budgetMax]);
+
+  const handleApply = () => {
+    resetPage();
+    refetch();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,7 +77,7 @@ export function RequestsPage() {
           </div>
         </div>
         <div className="px-4 pb-3">
-          <Button text="Apply" type="secondary" onClick={refetch} />
+          <Button text="Apply" type="secondary" onClick={handleApply} />
         </div>
       </Group>
 
@@ -116,6 +135,8 @@ export function RequestsPage() {
           ))}
         </Group>
       )}
+
+      {!loading && <Pagination page={page} hasMore={hasMore} onPrev={prevPage} onNext={nextPage} />}
     </div>
   );
 }

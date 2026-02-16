@@ -37,6 +37,8 @@ DEALS_ROLE_PREFIX = "deals_role:"
 DEALS_CHANNEL_PREFIX = "deals_channel:"
 DEALS_CLEAR_PREFIX = "deals_clear"
 DEALS_ACTIVE_CLEAR_PREFIX = "deals_active_clear"
+LISTINGS_PAGE_PREFIX = "listings_page:"
+REQUESTS_PAGE_PREFIX = "requests_page:"
 
 DEAL_LIST_FILTERS_KEY = "deal_list_filters"
 ACTIVE_DEAL_KEY = "active_deal_id"
@@ -44,6 +46,10 @@ ACTIVE_DEAL_PIN_KEY = "active_deal_pinned_message_id"
 DEAL_DRAFTS_KEY = "deal_drafts"
 DEALS_PAGE_SIZE = 8
 DEALS_ORDER_BY = "updated_at_desc"
+LISTINGS_PAGE_SIZE = 8
+REQUESTS_PAGE_SIZE = 8
+LISTING_LIST_PAGE_KEY = "listing_list_page"
+REQUEST_LIST_PAGE_KEY = "request_list_page"
 
 
 class ListingCreateState(StatesGroup):
@@ -356,15 +362,30 @@ def _main_menu_keyboard():
     return builder.as_markup()
 
 
-def _items_keyboard(items: list[dict], prefix: str):
+def _items_keyboard(
+    items: list[dict],
+    prefix: str,
+    *,
+    page: int = 0,
+    has_more: bool = False,
+    page_prefix: str = "",
+):
     builder = InlineKeyboardBuilder()
-    for item in items[:10]:
+    for item in items:
         item_id = item.get("id")
         if item_id is None:
             continue
         builder.button(text=f"#{item_id}", callback_data=f"{prefix}{item_id}")
-    builder.button(text="Back to menu", callback_data=MENU_MAIN)
     builder.adjust(2)
+    if page_prefix:
+        nav_buttons: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton(text="Prev", callback_data=f"{page_prefix}{page - 1}"))
+        if has_more:
+            nav_buttons.append(InlineKeyboardButton(text="Next", callback_data=f"{page_prefix}{page + 1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+    builder.row(InlineKeyboardButton(text="Back to menu", callback_data=MENU_MAIN))
     return builder.as_markup()
 
 
@@ -619,45 +640,69 @@ async def _prompt_request_brief(message: Message) -> None:
     )
 
 
-async def _send_listings(message: Message) -> None:
+async def _send_listings(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    page = max(int(data.get(LISTING_LIST_PAGE_KEY) or 0), 0)
+    limit = LISTINGS_PAGE_SIZE + 1
+    offset = page * LISTINGS_PAGE_SIZE
     try:
-        items = await api_client.list_listings()
+        items = await api_client.list_listings(limit=limit, offset=offset)
     except Exception as exc:
         await message.answer(f"Failed to load listings: {exc}")
         return
     if not items:
         await message.answer("No listings found", reply_markup=_main_menu_keyboard())
         return
+    has_more = len(items) > LISTINGS_PAGE_SIZE
+    if has_more:
+        items = items[:LISTINGS_PAGE_SIZE]
     lines = []
-    for item in items[:10]:
+    if page > 0 or has_more:
+        lines.append(f"Page: {page + 1}")
+    for item in items:
         price = item.get("price_usd")
         price_label = "-" if price is None else price
         lines.append(
             f"#{item.get('id')} channel={item.get('channel_id')} price={price_label} format={item.get('format')}"
         )
-    if len(items) > 10:
-        lines.append(f"... {len(items) - 10} more")
-    await message.answer("\n".join(lines), reply_markup=_items_keyboard(items, LISTING_PREFIX))
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=_items_keyboard(
+            items, LISTING_PREFIX, page=page, has_more=has_more, page_prefix=LISTINGS_PAGE_PREFIX
+        ),
+    )
 
 
-async def _send_requests(message: Message) -> None:
+async def _send_requests(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    page = max(int(data.get(REQUEST_LIST_PAGE_KEY) or 0), 0)
+    limit = REQUESTS_PAGE_SIZE + 1
+    offset = page * REQUESTS_PAGE_SIZE
     try:
-        items = await api_client.list_requests()
+        items = await api_client.list_requests(limit=limit, offset=offset)
     except Exception as exc:
         await message.answer(f"Failed to load requests: {exc}")
         return
     if not items:
         await message.answer("No requests found", reply_markup=_main_menu_keyboard())
         return
+    has_more = len(items) > REQUESTS_PAGE_SIZE
+    if has_more:
+        items = items[:REQUESTS_PAGE_SIZE]
     lines = []
-    for item in items[:10]:
+    if page > 0 or has_more:
+        lines.append(f"Page: {page + 1}")
+    for item in items:
         budget = item.get("budget")
         budget_label = "-" if budget is None else budget
         brief = item.get("brief") or ""
         lines.append(f"#{item.get('id')} budget={budget_label} brief={brief}")
-    if len(items) > 10:
-        lines.append(f"... {len(items) - 10} more")
-    await message.answer("\n".join(lines), reply_markup=_items_keyboard(items, REQUEST_PREFIX))
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=_items_keyboard(
+            items, REQUEST_PREFIX, page=page, has_more=has_more, page_prefix=REQUESTS_PAGE_PREFIX
+        ),
+    )
 
 
 def _deal_quick_action(item: dict, role: str) -> tuple[str, str] | None:
@@ -827,13 +872,15 @@ async def cancel_flow(message: Message, state: FSMContext) -> None:
         await _clear_state_keep(state)
     await message.answer("Canceled.", reply_markup=_main_menu_keyboard())
 @router.message(Command("listings"))
-async def list_listings(message: Message) -> None:
-    await _send_listings(message)
+async def list_listings(message: Message, state: FSMContext) -> None:
+    await state.update_data(**{LISTING_LIST_PAGE_KEY: 0})
+    await _send_listings(message, state)
 
 
 @router.message(Command("requests"))
-async def list_requests(message: Message) -> None:
-    await _send_requests(message)
+async def list_requests(message: Message, state: FSMContext) -> None:
+    await state.update_data(**{REQUEST_LIST_PAGE_KEY: 0})
+    await _send_requests(message, state)
 
 
 @router.message(Command("channels"))
@@ -1033,16 +1080,18 @@ async def menu_main(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == MENU_LISTINGS)
-async def menu_listings(callback: CallbackQuery) -> None:
+async def menu_listings(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
-        await _send_listings(callback.message)
+        await state.update_data(**{LISTING_LIST_PAGE_KEY: 0})
+        await _send_listings(callback.message, state)
     await callback.answer()
 
 
 @router.callback_query(F.data == MENU_REQUESTS)
-async def menu_requests(callback: CallbackQuery) -> None:
+async def menu_requests(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
-        await _send_requests(callback.message)
+        await state.update_data(**{REQUEST_LIST_PAGE_KEY: 0})
+        await _send_requests(callback.message, state)
     await callback.answer()
 
 
@@ -1065,6 +1114,36 @@ async def deals_page(callback: CallbackQuery, state: FSMContext) -> None:
     page = int(page_raw)
     await _set_deal_filters(state, page=page)
     await _send_deals(callback.message, state, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(LISTINGS_PAGE_PREFIX))
+async def listings_page(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    page_raw = callback.data[len(LISTINGS_PAGE_PREFIX) :]
+    if not page_raw.isdigit():
+        await callback.answer()
+        return
+    page = int(page_raw)
+    await state.update_data(**{LISTING_LIST_PAGE_KEY: page})
+    await _send_listings(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(REQUESTS_PAGE_PREFIX))
+async def requests_page(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        await callback.answer()
+        return
+    page_raw = callback.data[len(REQUESTS_PAGE_PREFIX) :]
+    if not page_raw.isdigit():
+        await callback.answer()
+        return
+    page = int(page_raw)
+    await state.update_data(**{REQUEST_LIST_PAGE_KEY: page})
+    await _send_requests(callback.message, state)
     await callback.answer()
 
 

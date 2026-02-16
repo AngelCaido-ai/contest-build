@@ -7,9 +7,9 @@ import {
   SkeletonElement,
   Select,
 } from "@telegram-tools/ui-kit";
-import { apiFetch } from "../api/client";
-import { useApi } from "../hooks/useApi";
+import { usePaginatedApi } from "../hooks/usePaginatedApi";
 import { EmptyState } from "../components/EmptyState";
+import { Pagination } from "../components/Pagination";
 import { DealStatusBadge } from "../components/DealStatusBadge";
 import type { Deal, DealStatus } from "../types";
 
@@ -34,13 +34,30 @@ export function DealsPage() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string | null>("__all__");
 
-  const fetcher = useCallback(() => apiFetch<Deal[]>("/deals"), []);
-  const { data: deals, loading } = useApi(fetcher, []);
+  const buildUrl = useCallback(
+    (limit: number, offset: number) => `/deals?limit=${limit}&offset=${offset}`,
+    [],
+  );
+
+  const {
+    data: deals,
+    loading,
+    page,
+    hasMore,
+    nextPage,
+    prevPage,
+    resetPage,
+  } = usePaginatedApi<Deal>(buildUrl, []);
 
   const filtered =
     deals?.filter(
       (d) => !statusFilter || statusFilter === "__all__" || d.status === statusFilter,
     ) ?? [];
+
+  const handleStatusChange = (v: string | null) => {
+    setStatusFilter(v);
+    resetPage();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,7 +70,7 @@ export function DealsPage() {
           <Select
             options={STATUS_OPTIONS}
             value={statusFilter}
-            onChange={(v) => setStatusFilter(v)}
+            onChange={handleStatusChange}
           />
         </div>
       </Group>
@@ -100,6 +117,8 @@ export function DealsPage() {
           ))}
         </Group>
       )}
+
+      {!loading && <Pagination page={page} hasMore={hasMore} onPrev={prevPage} onNext={nextPage} />}
     </div>
   );
 }

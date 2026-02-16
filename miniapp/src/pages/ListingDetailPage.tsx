@@ -244,14 +244,14 @@ export function ListingDetailPage() {
             numeric
           />
           <textarea
-            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            className="w-full text-sm"
             rows={4}
             placeholder={"Brief\nExample:\n- product\n- CTA\n- constraints"}
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
           />
           <textarea
-            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            className="w-full text-sm"
             rows={3}
             placeholder="Creative example (text)"
             value={creativeExample}

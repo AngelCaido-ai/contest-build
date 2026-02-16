@@ -16,3 +16,22 @@ body {
   color: var(--tg-theme-text-color, #000);
   overscroll-behavior: none;
 }
+
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]),
+textarea,
+select {
+  background-color: var(--tg-theme-secondary-bg-color, #f0f0f0) !important;
+  border: 1px solid var(--tg-theme-hint-color, #999) !important;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--tg-theme-text-color, #000);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease;
+}
+
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--tg-theme-link-color, #2481cc) !important;
+  outline: none;
+}

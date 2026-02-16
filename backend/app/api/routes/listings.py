@@ -58,6 +58,8 @@ def list_listings(
     active: bool | None = Query(default=None),
     channel_id: int | None = Query(default=None),
     exclude_own: bool = Query(default=False),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> list[ListingOut]:
@@ -73,7 +75,7 @@ def list_listings(
     if exclude_own:
         own_channel_ids = db.query(Channel.id).filter(Channel.owner_user_id == user.id)
         query = query.filter(~Listing.channel_id.in_(own_channel_ids))
-    items = query.all()
+    items = query.order_by(Listing.created_at.desc()).offset(offset).limit(limit).all()
     return [ListingOut.model_validate(item) for item in items]
 
 

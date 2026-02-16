@@ -104,14 +104,14 @@ export function CreateRequestPage() {
             numeric
           />
           <textarea
-            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            className="w-full text-sm"
             rows={3}
             placeholder='dates JSON, e.g. {"from":"2026-02-10","to":"2026-02-20"}'
             value={dates}
             onChange={(e) => setDates(e.target.value)}
           />
           <textarea
-            className="w-full rounded-xl border border-[var(--tg-theme-hint-color,#ccc)] bg-transparent px-3 py-2 text-sm"
+            className="w-full text-sm"
             rows={4}
             placeholder="Brief"
             value={brief}

@@ -324,6 +324,8 @@ def bot_list_listings(
     price_max: float | None = Query(default=None),
     active: bool | None = Query(default=None),
     channel_id: int | None = Query(default=None),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[ListingOut]:
     query = db.query(Listing)
@@ -335,7 +337,7 @@ def bot_list_listings(
         query = query.filter(Listing.price_usd >= price_min)
     if price_max is not None:
         query = query.filter(Listing.price_usd <= price_max)
-    items = query.all()
+    items = query.order_by(Listing.created_at.desc()).offset(offset).limit(limit).all()
     return [ListingOut.model_validate(item) for item in items]
 
 
@@ -351,6 +353,8 @@ def bot_get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingOu
 def bot_list_requests(
     budget_min: float | None = Query(default=None),
     budget_max: float | None = Query(default=None),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[RequestOut]:
     query = db.query(Request)
@@ -358,7 +362,7 @@ def bot_list_requests(
         query = query.filter(Request.budget >= budget_min)
     if budget_max is not None:
         query = query.filter(Request.budget <= budget_max)
-    items = query.all()
+    items = query.order_by(Request.created_at.desc()).offset(offset).limit(limit).all()
     return [RequestOut.model_validate(item) for item in items]
 
 

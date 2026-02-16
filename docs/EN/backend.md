@@ -414,7 +414,7 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | `POST` | `/listings/` | Create listing | JWT (owner) |
-| `GET` | `/listings/` | List listings (filters: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT |
+| `GET` | `/listings/` | List listings (filters: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`; pagination: `limit`, `offset`) | JWT |
 | `GET` | `/listings/{id}` | Get listing (includes channel preview and stats if present) | JWT |
 | `PATCH` | `/listings/{id}` | Update listing | JWT (owner) |
 
@@ -425,7 +425,7 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | `POST` | `/requests/` | Create request | JWT |
-| `GET` | `/requests/` | List requests (filters: `budget_min`, `budget_max`) | JWT |
+| `GET` | `/requests/` | List requests (filters: `budget_min`, `budget_max`; pagination: `limit`, `offset`) | JWT |
 | `GET` | `/requests/{id}` | Get request | JWT |
 | `PATCH` | `/requests/{id}` | Update request | JWT (advertiser) |
 
@@ -434,7 +434,7 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | `POST` | `/deals/` | Create deal (from listing or request); 409 with `deal_id` if active deal exists for listing or for request+channel | JWT |
-| `GET` | `/deals/` | List current user deals | JWT |
+| `GET` | `/deals/` | List current user deals (pagination: `limit`, `offset`) | JWT |
 | `GET` | `/deals/{id}` | Get deal | JWT (participant) |
 | `GET` | `/deals/{id}/events` | Deal event history (newest first) | JWT (participant) |
 | `POST` | `/deals/{id}/terms` | Lock deal terms | JWT (owner/manager) |
@@ -479,10 +479,10 @@ All endpoints protected by `X-Bot-Secret` header.
 | `POST` | `/bot/channels` | Create/update channel |
 | `GET` | `/bot/channels` | List user channels (by `tg_user_id`) |
 | `POST` | `/bot/listings` | Create listing (requires `linked_wallet`, else 400) |
-| `GET` | `/bot/listings` | List listings (filters: `price_min`, `price_max`, `active`, `channel_id`) |
+| `GET` | `/bot/listings` | List listings (filters: `price_min`, `price_max`, `active`, `channel_id`; pagination: `limit`, `offset`) |
 | `GET` | `/bot/listings/{id}` | Get listing |
 | `POST` | `/bot/requests` | Create request |
-| `GET` | `/bot/requests` | List requests (filters: `budget_min`, `budget_max`) |
+| `GET` | `/bot/requests` | List requests (filters: `budget_min`, `budget_max`; pagination: `limit`, `offset`) |
 | `GET` | `/bot/requests/{id}` | Get request |
 | `POST` | `/bot/deals` | Create deal; 409 if active deal exists for listing |
 | `GET` | `/bot/deals` | List deals (filters: `tg_user_id`, `statuses`, `role`, `channel_id`, `limit`, `offset`, `order_by`) |

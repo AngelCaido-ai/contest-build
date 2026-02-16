@@ -414,7 +414,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/listings/` | Создать листинг | JWT (owner) |
-| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`) | JWT |
+| `GET` | `/listings/` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`, `exclude_own`; пагинация: `limit`, `offset`) | JWT |
 | `GET` | `/listings/{id}` | Получить листинг (включает preview канала и статистику, если есть) | JWT |
 | `PATCH` | `/listings/{id}` | Обновить листинг | JWT (owner) |
 
@@ -425,7 +425,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/requests/` | Создать заявку | JWT |
-| `GET` | `/requests/` | Список заявок (фильтры: `budget_min`, `budget_max`) | JWT |
+| `GET` | `/requests/` | Список заявок (фильтры: `budget_min`, `budget_max`; пагинация: `limit`, `offset`) | JWT |
 | `GET` | `/requests/{id}` | Получить заявку | JWT |
 | `PATCH` | `/requests/{id}` | Обновить заявку | JWT (advertiser) |
 
@@ -434,7 +434,7 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
 | `POST` | `/deals/` | Создать сделку (из листинга или заявки); 409 с `deal_id` если уже есть активная сделка по листингу или по заявке+каналу | JWT |
-| `GET` | `/deals/` | Список сделок текущего пользователя | JWT |
+| `GET` | `/deals/` | Список сделок текущего пользователя (пагинация: `limit`, `offset`) | JWT |
 | `GET` | `/deals/{id}` | Получить сделку | JWT (участник) |
 | `GET` | `/deals/{id}/events` | История событий сделки (новые первыми) | JWT (участник) |
 | `POST` | `/deals/{id}/terms` | Зафиксировать условия сделки | JWT (owner/manager) |
@@ -479,10 +479,10 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 | `POST` | `/bot/channels` | Создать/обновить канал |
 | `GET` | `/bot/channels` | Список каналов пользователя (по `tg_user_id`) |
 | `POST` | `/bot/listings` | Создать листинг (требуется `linked_wallet`, иначе 400) |
-| `GET` | `/bot/listings` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`) |
+| `GET` | `/bot/listings` | Список листингов (фильтры: `price_min`, `price_max`, `active`, `channel_id`; пагинация: `limit`, `offset`) |
 | `GET` | `/bot/listings/{id}` | Получить листинг |
 | `POST` | `/bot/requests` | Создать заявку |
-| `GET` | `/bot/requests` | Список заявок (фильтры: `budget_min`, `budget_max`) |
+| `GET` | `/bot/requests` | Список заявок (фильтры: `budget_min`, `budget_max`; пагинация: `limit`, `offset`) |
 | `GET` | `/bot/requests/{id}` | Получить заявку |
 | `POST` | `/bot/deals` | Создать сделку; 409 если по листингу уже есть активная сделка |
 | `GET` | `/bot/deals` | Список сделок (фильтры: `tg_user_id`, `statuses`, `role`, `channel_id`, `limit`, `offset`, `order_by`) |

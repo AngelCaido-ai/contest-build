@@ -397,10 +397,19 @@ async def remove_channel_manager(tg_user_id: int, channel_id: int, manager_id: i
         raise
 
 
-async def list_listings() -> list[dict]:
+async def list_listings(
+    *,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict]:
+    params: dict[str, object] = {}
+    if limit is not None:
+        params["limit"] = limit
+    if offset is not None:
+        params["offset"] = offset
     try:
         client = _get_client()
-        resp = await client.get("/bot/listings")
+        resp = await client.get("/bot/listings", params=params)
         resp.raise_for_status()
         return resp.json()
     except Exception:
@@ -419,10 +428,19 @@ async def get_listing(listing_id: int) -> dict:
         raise
 
 
-async def list_requests() -> list[dict]:
+async def list_requests(
+    *,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict]:
+    params: dict[str, object] = {}
+    if limit is not None:
+        params["limit"] = limit
+    if offset is not None:
+        params["offset"] = offset
     try:
         client = _get_client()
-        resp = await client.get("/bot/requests")
+        resp = await client.get("/bot/requests", params=params)
         resp.raise_for_status()
         return resp.json()
     except Exception:
