@@ -112,6 +112,14 @@ def send_media(chat_id: int, text: str | None, media_items: list[dict] | list[st
     return first.get("message_id")
 
 
+def delete_message(chat_id: int, message_id: int) -> bool:
+    result = _post("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+    if result is None:
+        logger.warning("delete_message: failed chat_id=%s message_id=%s", chat_id, message_id)
+        return False
+    return True
+
+
 def _detect_upload_media_type(filename: str | None, content_type: str | None) -> str:
     ctype = (content_type or "").lower()
     name = (filename or "").lower()
@@ -166,10 +174,13 @@ def upload_media_for_user(chat_id: int, filename: str, content: bytes, content_t
         if not file_id:
             logger.warning("upload_media_for_user: file_id missing")
             return None
+        msg_id = result.get("message_id")
+        if msg_id:
+            delete_message(chat_id, msg_id)
         return {
             "type": media_type,
             "file_id": file_id,
-            "message_id": result.get("message_id"),
+            "message_id": msg_id,
         }
     except Exception:
         logger.exception("upload_media_for_user: request error")
