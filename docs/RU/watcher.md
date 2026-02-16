@@ -1,10 +1,10 @@
 # Модуль watcher
 
-Лёгкий Telegram-бот на **aiogram 3** для отслеживания правок постов в каналах (tamper detection).
+Телеграм userbot на **Telethon** (MTProto) для отслеживания **правок** и **удалений** постов в каналах.
 
 ## Table of Contents
 
-- [Зачем нужен отдельный бот](#зачем-нужен-отдельный-бот)
+- [Зачем нужен отдельный userbot](#зачем-нужен-отдельный-userbot)
 - [Структура](#структура)
 - [Конфигурация](#конфигурация-configpy)
 - [Точка входа](#точка-входа-mainpy)
@@ -13,14 +13,20 @@
 - [Настройка](#настройка)
 - [Зависимости](#зависимости)
 
-## Зачем нужен отдельный бот
+## Зачем нужен отдельный userbot
 
-Telegram Bot API **не доставляет** `edited_channel_post` обновления боту, который сам отправил сообщение. Это задокументированное поведение: `channel_post` описывается как «new **incoming** channel post», а сообщения бота не считаются «incoming» для него самого.
+Telegram Bot API имеет два ограничения:
+1. **Не доставляет** `edited_channel_post` боту, который сам отправил сообщение.
+2. **Не уведомляет** об удалении сообщений в каналах — такого типа обновления в Bot API не существует.
 
-Решение — **второй бот** (watcher), который:
-1. Добавлен как администратор канала (наравне с основным ботом).
-2. Получает `edited_channel_post` для **всех** сообщений в канале, включая отправленные основным ботом.
-3. При обнаружении правки вызывает backend API (`POST /bot/tamper`) для пометки сделки.
+Только MTProto API (Telethon) с **пользовательской сессией** может получать событие `UpdateDeleteChannelMessages`, которое Telegram отправляет при удалении постов.
+
+Решение — **Telethon userbot** (watcher), который:
+1. Подключается к Telegram по MTProto через пользовательскую сессию.
+2. Получает `events.MessageEdited` для отслеживания правок.
+3. Получает `events.MessageDeleted` для отслеживания удалений.
+4. При обнаружении правки вызывает `POST /bot/tamper`.
+5. При обнаружении удаления вызывает `POST /bot/deleted`.
 
 ## Структура
 
@@ -30,8 +36,8 @@ watcher/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py       # Конфигурация (WatcherSettings)
-│   ├── handlers.py     # Обработчики канальных обновлений
-│   └── main.py         # Точка входа, polling
+│   ├── handlers.py     # Обработчики событий Telethon
+│   └── main.py         # Точка входа, TelegramClient
 ```
 
 ---
@@ -40,34 +46,38 @@ watcher/
 
 Класс `WatcherSettings` (pydantic-settings):
 
-| Переменная          | Тип   | По умолчанию            | Описание                        |
-|---------------------|-------|-------------------------|---------------------------------|
-| `WATCHER_BOT_TOKEN` | str   | —                       | Токен watcher Telegram-бота     |
-| `API_BASE_URL`      | str   | `http://localhost:8000` | Базовый URL backend API         |
-| `BOT_SECRET`        | str   | —                       | Секрет для заголовка X-Bot-Secret |
+| Переменная          | Тип   | По умолчанию            | Описание                              |
+|---------------------|-------|-------------------------|---------------------------------------|
+| `TELETHON_API_ID`   | int   | —                       | API ID приложения (из my.telegram.org) |
+| `TELETHON_API_HASH` | str   | —                       | API Hash приложения                    |
+| `TELETHON_SESSION`  | str   | —                       | StringSession пользователя             |
+| `API_BASE_URL`      | str   | `http://localhost:8000` | Базовый URL backend API                |
+| `BOT_SECRET`        | str   | —                       | Секрет для заголовка X-Bot-Secret      |
+
+> Watcher использует те же `TELETHON_*` переменные, что и `stats_service`. Отдельная сессия не требуется.
 
 ---
 
 ## Точка входа (`main.py`)
 
-1. Создаёт `Bot` с `WATCHER_BOT_TOKEN`.
-2. Подключает единственный роутер (`handlers.router`).
-3. `allowed_updates`: `["edited_channel_post", "edited_message", "channel_post"]`.
-4. Удаляет вебхук и запускает polling.
+1. Создаёт `TelegramClient` с `WATCHER_TELETHON_SESSION`.
+2. Подключается к Telegram по MTProto (`client.start()`).
+3. Регистрирует event handlers: `MessageEdited`, `MessageDeleted`.
+4. Запускает бесконечный цикл приёма событий (`run_until_disconnected`).
 
 ---
 
 ## Обработчики (`handlers.py`)
 
-| Хендлер                  | Тип обновления          | Логика                                                |
-|--------------------------|-------------------------|-------------------------------------------------------|
-| `on_edited_channel_post` | `edited_channel_post`   | Вызывает `_handle_edit` → `POST /bot/tamper`          |
-| `on_edited_message`      | `edited_message`        | То же (для групп, привязанных к каналу)               |
-| `on_channel_post`        | `channel_post`          | Fallback: обрабатывает только если `edit_date` задан  |
+| Хендлер              | Событие Telethon        | Логика                                                    |
+|----------------------|-------------------------|-----------------------------------------------------------|
+| `on_message_edited`  | `events.MessageEdited`  | Фильтрует только каналы → `POST /bot/tamper`              |
+| `on_message_deleted` | `events.MessageDeleted` | Для каждого удалённого message_id → `POST /bot/deleted`   |
 
-Функция `_handle_edit`:
-1. Определяет `channel_id` из `message.sender_chat.id` (приоритет) или `message.chat.id`.
-2. Вызывает `POST /bot/tamper` с `{channel_tg_chat_id, message_id}`.
+Функция `_call_api`:
+1. Отправляет POST-запрос к backend с `{channel_tg_chat_id, message_id}`.
+2. При 404 (канал/сделка не найдены) — пишет debug-лог и пропускает.
+3. При других ошибках — логирует exception.
 
 ---
 
@@ -82,27 +92,35 @@ watcher:
   environment:
     API_BASE_URL: http://backend:8000
     BOT_SECRET: "${BOT_SECRET}"
+    TELETHON_API_ID: "${TELETHON_API_ID}"
+    TELETHON_API_HASH: "${TELETHON_API_HASH}"
+    TELETHON_SESSION: "${TELETHON_SESSION}"
   depends_on:
     backend:
-      condition: service_started
+      condition: service_healthy
   command: python -m watcher.app.main
 ```
 
-Если `WATCHER_BOT_TOKEN` не задан, сервис ожидает (аналогично основному боту).
+Если `TELETHON_SESSION` не задан, сервис ожидает (аналогично основному боту).
 
 ---
 
 ## Настройка
 
-1. Создать нового бота через [@BotFather](https://t.me/BotFather).
-2. Добавить токен в `.env`: `WATCHER_BOT_TOKEN=...`.
-3. Добавить watcher-бота как администратора в каждый канал, где нужен мониторинг.
-4. Перезапустить `docker compose up --build`.
+1. Сгенерировать сессию (если ещё нет): `python generate_session.py` (ввести номер телефона и код).
+2. Добавить переменные в `.env` (те же, что для stats_service):
+   ```
+   TELETHON_API_ID=12345678
+   TELETHON_API_HASH=abc123...
+   TELETHON_SESSION=1BVtsO...
+   ```
+3. Убедиться, что пользовательский аккаунт **подписан** на каналы, которые нужно мониторить.
+4. Перезапустить: `docker compose up -d --build watcher`.
 
 ---
 
 ## Зависимости
 
-- **aiogram 3** — Telegram Bot Framework
+- **Telethon 1.36** — MTProto клиент для Telegram
+- **httpx** — асинхронный HTTP-клиент к backend
 - **pydantic / pydantic-settings** — конфигурация
-- **requests** — HTTP-клиент к backend

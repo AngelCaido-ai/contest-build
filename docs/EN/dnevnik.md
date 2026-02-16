@@ -134,3 +134,41 @@
 ### miniapp
 - `ChannelsPage`: added channel detail section showing Channel ID and Username when a channel is selected. Owner sees "Unlink Channel" button with a confirmation dialog. On success the channel is removed from the list.
 - Added TON network configuration: new env var `VITE_TON_NETWORK` (`testnet` | `mainnet`, defaults to `testnet`). `PaymentPage` now specifies `network: CHAIN.TESTNET/MAINNET` in `sendTransaction`, checks connected wallet chain, shows wrong-network warning banner, and disables Pay button if wallet is on the wrong network.
+
+### backend
+- Extended channel statistics: added `shares_per_post`, `reactions_per_post`, `enabled_notifications` and `*_prev` fields for trend indicators to `ChannelStats` model, schema, and MTProto fetch service. Added Alembic migration `0007_extended_channel_stats`.
+- Extended `DealChannelBrief` schema to include new stats fields for deal detail view.
+
+### miniapp
+- Created reusable `ChannelStatsCard` component displaying full channel statistics with trend arrows (up/down %) and language chips.
+- Updated `ChannelsPage`, `ListingDetailPage`, `RequestDetailPage`, and `DealDetailPage` to display extended stats (shares, reactions, notifications %, language distribution, trend indicators).
+
+### backend
+- **Bugfix**: `create_deposit_wallet` now generates deposit addresses in **non-bounceable** format (`is_bounceable=False`). Previously, bounceable addresses (`kQ...`/`EQ...`) caused TON to bounce funds back to the sender on uninitialized deposit wallets, preventing payment confirmation.
+- **Bugfix**: `_normalize_address` in `ton_escrow.py` now normalizes to raw format (`wc:hex`) instead of user-friendly format. Previously, `validate_ton_address` produced different strings for the same address depending on input encoding (testnet vs mainnet flags, url-safe vs standard base64), causing `find_incoming_tx` address comparison to always fail.
+
+### backend
+- Added `deal_price` and `network_fee` fields to `EscrowOut` schema. `POST /escrow/deals/{id}/deposit` now returns the deal price and network fee reserve separately, so the frontend can show a clear payment breakdown instead of just the total `expected_amount`.
+
+### miniapp
+- `PaymentPage`: payment amount section now shows a breakdown — Deal price, Network fee (+reserve), and Total — instead of a single confusing total that was higher than the deal price.
+- **Bugfix**: `CreateListingPage` now shows a loading spinner while user profile is being loaded, preventing false "First add a channel" prompt when `user` is null during auth. Previously, if channels loaded before auth completed, `ownerChannels` filter returned empty because `user?.id` was undefined.
+- **Bugfix**: `RequestDetailPage` no longer blocks the entire page when channels list is empty. Request details are always shown; the channel selection and response form are displayed only when channels are available. Users without channels see a prompt to add one below the request info, instead of a dead-end error page.
+- **Bugfix**: Advertiser can no longer override listing price when responding. Removed `price` from `ListingDetailPage` POST body — deal price is always taken from the listing. Backend `POST /deals` enforces listing price when `listing_id` is provided. Backend `do_update_terms` now strips `price` from updates when the deal is linked to a listing with a set price. `DealDetailPage` shows price as read-only text for listing-based deals and disables all role-dependent UI (`canEditTerms`, `canCreateCreative`, etc.) until the user profile is loaded, preventing a race condition where the advertiser could briefly see the owner's editing form.
+- **Bugfix**: Removed broken wizard-step system from `DealDetailPage` — wizard tabs were never rendered, so only the first applicable section was visible. Replaced with collapsible sections (`CollapsibleGroup`): primary action sections (Terms, Creative, Creative Review) open by default; secondary sections (Publish Date, Brief, View Creative) are collapsed. All applicable sections are now accessible simultaneously.
+- Added "Schedule Post" button for channel owner in `APPROVED` status. Owner can now transition the deal to `SCHEDULED` directly from the miniapp via `POST /deals/{id}/status` with confirmation dialog, instead of being redirected to the bot.
+- **Bugfix**: Fixed `AuthContext` — when `initData` is empty (e.g. reopened session or browser testing) but a cached JWT token exists, the `user` object was never loaded, causing `user?.id` to always be `undefined`. All users were identified as "owner" regardless of their actual role. Now `AuthContext` fetches the user profile via `GET /auth/me` whenever a cached token exists but `initData` is unavailable.
+
+### backend
+- **Bugfix**: `languages_json` in channel stats was storing raw `StatsGraphAsync` object (with `_` and `token` fields) instead of parsed language data. Now the backend resolves the async graph token via `LoadAsyncGraphRequest`, parses the Telegram chart JSON, and stores a clean `{"English": 0.65, "Russian": 0.35}` dictionary.
+
+### miniapp
+- **Bugfix**: `ChannelStatsCard` language chips now filter out raw `StatsGraphAsync` objects — if the stored data has a `_` key (Telethon type marker), it displays "—" instead of gibberish tokens.
+
+### watcher
+- **Rewrite**: Migrated watcher from aiogram (Bot API) to **Telethon** (MTProto userbot). Bot API cannot detect message deletions in channels — only MTProto receives `UpdateDeleteChannelMessages`. The watcher now handles both `events.MessageEdited` (→ `POST /bot/tamper`) and `events.MessageDeleted` (→ `POST /bot/deleted`) in real time.
+- Replaced `WATCHER_BOT_TOKEN` with shared `TELETHON_SESSION` / `TELETHON_API_ID` / `TELETHON_API_HASH` (same as stats_service).
+- Updated `docker-compose.yml`, `.env.example`, and watcher documentation (RU/EN).
+
+### backend
+- **Bugfix**: Added retry with exponential backoff to `_toncenter_request` in `ton_escrow.py`. Previously, toncenter 429 (Too Many Requests) errors caused `release_payment` and `refund_payment` to fail silently — funds remained stuck in deposit wallets after tampered/verification-failed deals. Now retries up to 4 times (1s → 2s → 4s → 8s backoff) on transient errors (429, 500, 502, 503, 504) and `ConnectionError`, respecting `Retry-After` header.

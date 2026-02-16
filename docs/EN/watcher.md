@@ -1,10 +1,10 @@
 # Watcher Module
 
-Lightweight Telegram bot on **aiogram 3** for monitoring post edits in channels (tamper detection).
+Telegram userbot on **Telethon** (MTProto) for monitoring post **edits** and **deletions** in channels.
 
 ## Table of Contents
 
-- [Why a Separate Bot](#why-a-separate-bot)
+- [Why a Separate Userbot](#why-a-separate-userbot)
 - [Structure](#structure)
 - [Configuration](#configuration-configpy)
 - [Entry Point](#entry-point-mainpy)
@@ -13,14 +13,20 @@ Lightweight Telegram bot on **aiogram 3** for monitoring post edits in channels 
 - [Setup](#setup)
 - [Dependencies](#dependencies)
 
-## Why a Separate Bot
+## Why a Separate Userbot
 
-Telegram Bot API **does not deliver** `edited_channel_post` updates to a bot that sent the message itself. This is documented behavior: `channel_post` is described as "new **incoming** channel post", and bot's own messages do not count as "incoming" for itself.
+Telegram Bot API has two limitations:
+1. **Does not deliver** `edited_channel_post` updates to a bot that sent the message itself.
+2. **Does not notify** about message deletions in channels — no such update type exists in Bot API.
 
-The solution is a **second bot** (watcher) that:
-1. Is added as channel administrator (alongside the main bot).
-2. Receives `edited_channel_post` for **all** messages in the channel, including those sent by the main bot.
-3. On detecting an edit, calls backend API (`POST /bot/tamper`) to mark the deal.
+Only MTProto API (Telethon) with a **user session** can receive `UpdateDeleteChannelMessages` events that Telegram sends when posts are deleted.
+
+The solution is a **Telethon userbot** (watcher) that:
+1. Connects to Telegram via MTProto using a user session.
+2. Receives `events.MessageEdited` to track post edits.
+3. Receives `events.MessageDeleted` to track post deletions.
+4. On detecting an edit, calls `POST /bot/tamper`.
+5. On detecting a deletion, calls `POST /bot/deleted`.
 
 ## Structure
 
@@ -30,8 +36,8 @@ watcher/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py       # Configuration (WatcherSettings)
-│   ├── handlers.py     # Channel update handlers
-│   └── main.py         # Entry point, polling
+│   ├── handlers.py     # Telethon event handlers
+│   └── main.py         # Entry point, TelegramClient
 ```
 
 ## Configuration (`config.py`)
@@ -40,28 +46,32 @@ Class `WatcherSettings` (pydantic-settings):
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `WATCHER_BOT_TOKEN` | str | — | Watcher Telegram bot token |
+| `TELETHON_API_ID` | int | — | Application API ID (from my.telegram.org) |
+| `TELETHON_API_HASH` | str | — | Application API Hash |
+| `TELETHON_SESSION` | str | — | User StringSession |
 | `API_BASE_URL` | str | `http://localhost:8000` | Backend API base URL |
 | `BOT_SECRET` | str | — | Secret for X-Bot-Secret header |
 
+> Watcher uses the same `TELETHON_*` variables as `stats_service`. No separate session required.
+
 ## Entry Point (`main.py`)
 
-1. Creates `Bot` with `WATCHER_BOT_TOKEN`.
-2. Registers single router (`handlers.router`).
-3. `allowed_updates`: `["edited_channel_post", "edited_message", "channel_post"]`.
-4. Removes webhook and starts polling.
+1. Creates `TelegramClient` with `WATCHER_TELETHON_SESSION`.
+2. Connects to Telegram via MTProto (`client.start()`).
+3. Registers event handlers: `MessageEdited`, `MessageDeleted`.
+4. Runs infinite event loop (`run_until_disconnected`).
 
 ## Handlers (`handlers.py`)
 
-| Handler | Update type | Logic |
+| Handler | Telethon Event | Logic |
 |---|---|---|
-| `on_edited_channel_post` | `edited_channel_post` | Calls `_handle_edit` → `POST /bot/tamper` |
-| `on_edited_message` | `edited_message` | Same (for groups linked to channel) |
-| `on_channel_post` | `channel_post` | Fallback: handles only if `edit_date` is set |
+| `on_message_edited` | `events.MessageEdited` | Filters channels only → `POST /bot/tamper` |
+| `on_message_deleted` | `events.MessageDeleted` | For each deleted message_id → `POST /bot/deleted` |
 
-Function `_handle_edit`:
-1. Resolves `channel_id` from `message.sender_chat.id` (priority) or `message.chat.id`.
-2. Calls `POST /bot/tamper` with `{channel_tg_chat_id, message_id}`.
+Function `_call_api`:
+1. Sends POST request to backend with `{channel_tg_chat_id, message_id}`.
+2. On 404 (channel/deal not found) — logs debug and skips.
+3. On other errors — logs exception.
 
 ## Docker
 
@@ -74,23 +84,31 @@ watcher:
   environment:
     API_BASE_URL: http://backend:8000
     BOT_SECRET: "${BOT_SECRET}"
+    TELETHON_API_ID: "${TELETHON_API_ID}"
+    TELETHON_API_HASH: "${TELETHON_API_HASH}"
+    TELETHON_SESSION: "${TELETHON_SESSION}"
   depends_on:
     backend:
-      condition: service_started
+      condition: service_healthy
   command: python -m watcher.app.main
 ```
 
-If `WATCHER_BOT_TOKEN` is not set, the service waits (same as main bot).
+If `TELETHON_SESSION` is not set, the service waits (same as main bot).
 
 ## Setup
 
-1. Create a new bot via [@BotFather](https://t.me/BotFather).
-2. Add token to `.env`: `WATCHER_BOT_TOKEN=...`.
-3. Add watcher bot as administrator to each channel requiring monitoring.
-4. Restart `docker compose up --build`.
+1. Generate session (if not yet): `python generate_session.py` (enter phone number and code).
+2. Add variables to `.env` (same as for stats_service):
+   ```
+   TELETHON_API_ID=12345678
+   TELETHON_API_HASH=abc123...
+   TELETHON_SESSION=1BVtsO...
+   ```
+3. Ensure the user account is **subscribed** to the channels that need monitoring.
+4. Restart: `docker compose up -d --build watcher`.
 
 ## Dependencies
 
-- **aiogram 3** — Telegram Bot Framework
+- **Telethon 1.36** — MTProto client for Telegram
+- **httpx** — async HTTP client to backend
 - **pydantic / pydantic-settings** — configuration
-- **requests** — HTTP client to backend

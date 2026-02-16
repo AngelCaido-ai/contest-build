@@ -1,44 +1,43 @@
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
 from watcher.app.config import settings
-from watcher.app.handlers import close_client, init_client, router
+from watcher.app.handlers import close_client, init_client, on_message_deleted, on_message_edited
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    logger.info("Watcher bot token length: %d", len(settings.watcher_bot_token))
+    logger.info("Watcher starting (Telethon userbot)")
     logger.info("API base URL: %s", settings.api_base_url)
 
+    client = TelegramClient(
+        StringSession(settings.telethon_session),
+        settings.telethon_api_id,
+        settings.telethon_api_hash,
+    )
+
+    await client.start()
+    me = await client.get_me()
+    logger.info("Watcher connected as: %s (id=%s)", me.username or me.first_name, me.id)
+
+    init_client()
+    logger.info("Watcher httpx AsyncClient initialized")
+
+    client.add_event_handler(on_message_edited, events.MessageEdited(chats=None))
+    client.add_event_handler(on_message_deleted, events.MessageDeleted(chats=None))
+    logger.info("Event handlers registered: MessageEdited, MessageDeleted")
+
     try:
-        bot = Bot(token=settings.watcher_bot_token)
-        bot_info = await bot.get_me()
-        logger.info("Watcher bot connected: @%s (%s)", bot_info.username, bot_info.first_name)
-
-        dp = Dispatcher(storage=MemoryStorage())
-        dp.include_router(router)
-
-        await bot.delete_webhook(drop_pending_updates=True)
-        allowed_updates = ["edited_channel_post", "edited_message", "channel_post"]
-        logger.info("Watcher allowed updates: %s", allowed_updates)
-
-        init_client()
-        logger.info("Watcher httpx AsyncClient initialized")
-
-        try:
-            logger.info("Starting watcher polling...")
-            await dp.start_polling(bot, allowed_updates=allowed_updates)
-        finally:
-            await close_client()
-            logger.info("Watcher httpx AsyncClient closed")
-    except Exception as e:
-        logger.error("Watcher error: %s", e, exc_info=True)
-        raise
+        logger.info("Watcher running, listening for events...")
+        await client.run_until_disconnected()
+    finally:
+        await close_client()
+        logger.info("Watcher stopped")
 
 
 if __name__ == "__main__":

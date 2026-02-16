@@ -13,6 +13,7 @@ import {
 import { ApiError, apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
+import { ChannelStatsCard } from "../components/ChannelStatsCard";
 import type { Channel, RequestItem } from "../types";
 import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
 
@@ -146,7 +147,7 @@ export function RequestDetailPage() {
     );
   }
 
-  if (requestLoading || channelsLoading) {
+  if (requestLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner size="32px" />
@@ -163,17 +164,7 @@ export function RequestDetailPage() {
     );
   }
 
-  if (channelsError || !channels || channels.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-12">
-        <Text type="body" color="danger">
-          {channelsError ?? "Add a channel first"}
-        </Text>
-        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
-      </div>
-    );
-  }
-
+  const hasChannels = !channelsLoading && channels && channels.length > 0;
   const stats = selectedChannel?.stats ?? null;
 
   return (
@@ -181,25 +172,6 @@ export function RequestDetailPage() {
       <Text type="title2" weight="bold">
         Preview
       </Text>
-
-      <Group header="Channel">
-        <div className="px-4 py-2">
-          <Select
-            options={channelOptions}
-            value={selectedChannelId ?? String((selectedChannel ?? channels[0]).id)}
-            onChange={(v) => setSelectedChannelId(v)}
-          />
-        </div>
-        <GroupItem
-          text="Stats"
-          description={
-            stats
-              ? `${formatNumber(stats.subscribers)} subscribers · ${formatNumber(stats.views_per_post)} views`
-              : "Stats not loaded"
-          }
-          after={<Button text="Refresh" type="secondary" onClick={refreshStats} />}
-        />
-      </Group>
 
       <Group header="Request Terms">
         <GroupItem
@@ -242,43 +214,83 @@ export function RequestDetailPage() {
         </Group>
       )}
 
-      <Group header="Response Parameters">
-        <div className="flex flex-col gap-3 px-4 py-3">
-          <Input
-            placeholder="Your price (optional)"
-            type="text"
-            value={dealPrice}
-            onChange={(v) => setDealPrice(v)}
-            numeric
-          />
-          <Input
-            placeholder="Format"
-            type="text"
-            value={dealFormat}
-            onChange={(v) => setDealFormat(v)}
-          />
-          <DateTimePickerField value={publishAt} onChange={setPublishAt} />
-          <Input
-            placeholder="verification_window (min)"
-            type="text"
-            value={verificationWindow}
-            onChange={(v) => setVerificationWindow(v)}
-            numeric
-          />
-          <textarea
-            className="w-full text-sm"
-            rows={4}
-            placeholder="Comment/deal terms"
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-          />
-        </div>
-      </Group>
+      {hasChannels ? (
+        <>
+          <Group header="Channel">
+            <div className="px-4 py-2">
+              <Select
+                options={channelOptions}
+                value={selectedChannelId ?? String((selectedChannel ?? channels[0]).id)}
+                onChange={(v) => setSelectedChannelId(v)}
+              />
+            </div>
+            <GroupItem
+              text=""
+              after={<Button text="Refresh Stats" type="secondary" onClick={refreshStats} />}
+            />
+          </Group>
 
-      <div className="flex flex-col gap-2 pt-2">
-        <Button text="Respond" type="primary" onClick={respond} />
-        <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
-      </div>
+          <ChannelStatsCard stats={stats} />
+
+          <Group header="Response Parameters">
+            <div className="flex flex-col gap-3 px-4 py-3">
+              <Input
+                placeholder="Your price (optional)"
+                type="text"
+                value={dealPrice}
+                onChange={(v) => setDealPrice(v)}
+                numeric
+              />
+              <Input
+                placeholder="Format"
+                type="text"
+                value={dealFormat}
+                onChange={(v) => setDealFormat(v)}
+              />
+              <DateTimePickerField value={publishAt} onChange={setPublishAt} />
+              <Input
+                placeholder="verification_window (min)"
+                type="text"
+                value={verificationWindow}
+                onChange={(v) => setVerificationWindow(v)}
+                numeric
+              />
+              <textarea
+                className="w-full text-sm"
+                rows={4}
+                placeholder="Comment/deal terms"
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+              />
+            </div>
+          </Group>
+
+          <div className="flex flex-col gap-2 pt-2">
+            <Button text="Respond" type="primary" onClick={respond} />
+            <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col gap-3 pt-2">
+          {channelsLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Spinner size="24px" />
+            </div>
+          ) : (
+            <>
+              <Group>
+                <div className="px-4 py-3">
+                  <Text type="body" color="secondary">
+                    To respond to this request, first add a channel.
+                  </Text>
+                </div>
+              </Group>
+              <Button text="Go to Channels" type="primary" onClick={() => navigate("/channels")} />
+            </>
+          )}
+          <Button text="Back" type="secondary" onClick={() => navigate(-1)} />
+        </div>
+      )}
     </div>
   );
 }

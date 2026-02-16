@@ -7,6 +7,7 @@ from app.models.channel import Channel
 from app.models.channel_manager import ChannelManager
 from app.models.creative import Creative
 from app.models.deal import Deal
+from app.models.listing import Listing
 from app.models.deal_event import DealEvent
 from app.models.escrow_payment import EscrowPayment
 from app.models.enums import CreativeStatus, DealStatus
@@ -151,6 +152,10 @@ def do_update_terms(db: Session, deal_id: int, actor_user_id: int, fields: dict)
         raise ValueError("forbidden")
     if deal.status not in {DealStatus.NEGOTIATING, DealStatus.TERMS_LOCKED}:
         raise ValueError("invalid_status")
+    if deal.listing_id is not None and "price" in fields:
+        listing = db.get(Listing, deal.listing_id)
+        if listing and listing.price_usd is not None:
+            fields.pop("price")
     log_payload = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in fields.items()}
     for key, value in fields.items():
         setattr(deal, key, value)

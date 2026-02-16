@@ -32,7 +32,8 @@ backend/
 │       ├── 0003_escrow_comment.py
 │       ├── 0004_deal_brief.py
 │       ├── 0005_user_tg_username.py
-│       └── 0006_sweep_fields.py
+│       ├── 0006_sweep_fields.py
+│       └── 0007_extended_channel_stats.py
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                    # FastAPI entry point
@@ -242,7 +243,14 @@ All secret comparisons use `hmac.compare_digest()` (constant-time) to prevent ti
 | `channel_id` | `int` FK → channels UNIQUE | Channel |
 | `subscribers` | `int?` | Subscribers |
 | `views_per_post` | `int?` | Views per post |
-| `languages_json` | `JSON?` | Language distribution |
+| `shares_per_post` | `int?` | Shares per post |
+| `reactions_per_post` | `int?` | Reactions per post |
+| `enabled_notifications` | `float?` | Share of subscribers with enabled notifications (0..1) |
+| `subscribers_prev` | `int?` | Subscribers (previous period) |
+| `views_per_post_prev` | `int?` | Views per post (previous period) |
+| `shares_per_post_prev` | `int?` | Shares per post (previous period) |
+| `reactions_per_post_prev` | `int?` | Reactions per post (previous period) |
+| `languages_json` | `JSON?` | Language distribution `{"English": 0.65, "Russian": 0.35}` |
 | `premium_json` | `JSON?` | Premium subscriber share |
 | `updated_at` | `datetime` | Last update |
 | `source` | `str?` | Data source (`mtproto` / `bot_api`) |
@@ -461,6 +469,8 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 |---|---|---|---|
 | `POST` | `/escrow/deals/{id}/deposit` | Create deposit address | JWT (participant) |
 
+Response `EscrowOut` includes `deal_price` (deal price) and `network_fee` (network fee reserve, = `expected_amount - deal_price`). Field `expected_amount` = `deal_price + TON_RESERVE_TON`.
+
 Endpoints confirm, release, refund removed — worker calls `escrow_service` functions directly, bypassing HTTP.
 
 ### Stats (`/stats`)
@@ -526,7 +536,7 @@ Shared service layer for deal business logic. Extracted from `deals.py` and `bot
 - `send_creative_to_advertiser(deal, creative, advertiser)` — send creative to advertiser
 
 **Business operations:**
-- `do_update_terms(db, deal_id, actor_user_id, fields)` → `Deal` — lock terms
+- `do_update_terms(db, deal_id, actor_user_id, fields)` → `Deal` — lock terms (strips `price` from fields if deal is linked to a listing with a set price)
 - `do_update_publish_at(db, deal_id, actor_user_id, publish_at)` → `Deal` — set publication date
 - `do_update_status(db, deal_id, actor_user_id, new_status)` → `Deal` — change status
 - `do_create_creative(db, deal_id, actor_user_id, text, media_file_ids)` → `Creative` — create creative
@@ -557,7 +567,8 @@ All financial ops (`confirm_payment`, `release_payment`, `refund_payment`, `swee
 
 TON blockchain integration via toncenter API (v2 + v3):
 
-- `create_deposit_wallet(deal_id)` — generate new TON wallet (v4r2)
+- `create_deposit_wallet(deal_id)` — generate new TON wallet (v4r2); address is generated in **non-bounceable** format to prevent funds from bouncing back on uninitialized contracts
+- `_normalize_address(value)` — normalize address to raw format (`wc:hex`) for unambiguous comparison (independent of testnet/bounceable/url-safe flags)
 - `encrypt_deposit_key(key)` / `decrypt_deposit_key(value)` — AES-GCM mnemonic encryption; `decrypt_deposit_key` throws `ValueError` on any decrypt error (invalid data, wrong key, corrupted blob)
 - `build_deposit_comment(deal_id)` — form comment `deal:<id>`
 - `find_incoming_tx(address, amount, comment)` — find incoming tx by address/amount/comment
@@ -566,11 +577,14 @@ TON blockchain integration via toncenter API (v2 + v3):
 - `send_sweep(key, address)` — send full remainder to advertiser address (mode 128)
 - Wallet support: v1r1–v4r2, v5r1 (auto-detect version)
 - Fallback: v3 API → v2 API on errors
-- Retry: up to 3 attempts on transient errors
+- Retry: up to **4 retries** on transient errors (429, 500, 502, 503, 504) and `ConnectionError`
+- **Exponential backoff**: 1s → 2s → 4s → 8s between attempts; on `429` respects `Retry-After` header
 
 ### stats_service.py
 
 - `fetch_stats(chat_id)` — get channel stats via MTProto (Telethon, `GetBroadcastStatsRequest`)
+- `_resolve_async_graph(client, graph)` — resolves `StatsGraphAsync` token via `LoadAsyncGraphRequest` and parses graph data into `{name: fraction}`
+- `_parse_graph_json(raw_json)` — parses Telegram stats graph JSON into `{language: fraction}` dict (0..1)
 - `fetch_bot_api_subscribers(chat_id)` — fallback: subscriber count via Bot API
 
 ### telegram_service.py
@@ -637,7 +651,7 @@ scan_escrow_deposits → check_verification_windows → sweep_completed_deposits
 process_scheduled_posts → check_deleted_posts → check_payment_timeouts → sleep(20) → repeat
 ```
 
-> Tamper detection is done by separate watcher bot (see [watcher.md](watcher.md)).
+> Tamper/deletion detection is done by the watcher userbot on Telethon (see [watcher.md](watcher.md)).
 
 ---
 
@@ -667,6 +681,7 @@ process_scheduled_posts → check_deleted_posts → check_payment_timeouts → s
 | `0004_deal_brief` | Added `brief` to deals |
 | `0005_user_tg_username` | Added `tg_username` to users |
 | `0006_sweep_fields` | Added `sweep_tx_hash`, `swept_at` for escrow sweep remainders |
+| `0007_extended_channel_stats` | Extended channel stats: `shares_per_post`, `reactions_per_post`, `enabled_notifications`, `*_prev` fields for trends |
 
 ---
 

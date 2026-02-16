@@ -12,6 +12,7 @@ import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useAuth } from "../contexts/AuthContext";
 import { EmptyState } from "../components/EmptyState";
+import { ChannelStatsCard } from "../components/ChannelStatsCard";
 import type { Channel, Manager, TgAdmin } from "../types";
 
 export function ChannelsPage() {
@@ -193,27 +194,31 @@ export function ChannelsPage() {
       )}
 
       {selectedChannelId && selectedChannel && (
-        <Group header={selectedChannel.title ?? selectedChannel.username ?? `#${selectedChannel.tg_chat_id}`}>
-          <GroupItem
-            text="Channel ID"
-            description={String(selectedChannel.tg_chat_id)}
-          />
-          {selectedChannel.username && (
-            <GroupItem text="Username" description={`@${selectedChannel.username}`} />
-          )}
-          {isOwner && (
+        <>
+          <Group header={selectedChannel.title ?? selectedChannel.username ?? `#${selectedChannel.tg_chat_id}`}>
             <GroupItem
-              text=""
-              after={
-                <Button
-                  text="Unlink Channel"
-                  type="secondary"
-                  onClick={() => setUnlinkDialogOpen(true)}
-                />
-              }
+              text="Channel ID"
+              description={String(selectedChannel.tg_chat_id)}
             />
-          )}
-        </Group>
+            {selectedChannel.username && (
+              <GroupItem text="Username" description={`@${selectedChannel.username}`} />
+            )}
+            {isOwner && (
+              <GroupItem
+                text=""
+                after={
+                  <Button
+                    text="Unlink Channel"
+                    type="secondary"
+                    onClick={() => setUnlinkDialogOpen(true)}
+                  />
+                }
+              />
+            )}
+          </Group>
+
+          <ChannelStatsCard stats={selectedChannel.stats ?? null} />
+        </>
       )}
 
       {unlinkDialogOpen && (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Group, Input, Select, Text, useToast } from "@telegram-tools/ui-kit";
+import { Button, Group, Input, Select, Spinner, Text, useToast } from "@telegram-tools/ui-kit";
 import { apiFetch } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
@@ -114,7 +114,15 @@ export function CreateListingPage() {
     }
   };
 
-  if (!loading && ownerChannels.length === 0) {
+  if (loading || !user) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Spinner size="32px" />
+      </div>
+    );
+  }
+
+  if (ownerChannels.length === 0) {
     return (
       <div className="flex flex-col gap-4">
         <Text type="title2" weight="bold">

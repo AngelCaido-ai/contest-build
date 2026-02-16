@@ -32,7 +32,8 @@ backend/
 │       ├── 0003_escrow_comment.py
 │       ├── 0004_deal_brief.py
 │       ├── 0005_user_tg_username.py
-│       └── 0006_sweep_fields.py
+│       ├── 0006_sweep_fields.py
+│       └── 0007_extended_channel_stats.py
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                    # Точка входа FastAPI
@@ -242,7 +243,14 @@ Middleware `CORSMiddleware` настроен с явными ограничен�
 | `channel_id` | `int` FK → channels UNIQUE | Канал |
 | `subscribers` | `int?` | Подписчики |
 | `views_per_post` | `int?` | Просмотры на пост |
-| `languages_json` | `JSON?` | Распределение языков |
+| `shares_per_post` | `int?` | Пересылки на пост |
+| `reactions_per_post` | `int?` | Реакции на пост |
+| `enabled_notifications` | `float?` | Доля подписчиков с включёнными уведомлениями (0..1) |
+| `subscribers_prev` | `int?` | Подписчики (предыдущий период) |
+| `views_per_post_prev` | `int?` | Просмотры на пост (предыдущий период) |
+| `shares_per_post_prev` | `int?` | Пересылки на пост (предыдущий период) |
+| `reactions_per_post_prev` | `int?` | Реакции на пост (предыдущий период) |
+| `languages_json` | `JSON?` | Распределение языков `{"English": 0.65, "Russian": 0.35}` |
 | `premium_json` | `JSON?` | Доля premium-подписчиков |
 | `updated_at` | `datetime` | Последнее обновление |
 | `source` | `str?` | Источник данных (`mtproto` / `bot_api`) |
@@ -461,6 +469,8 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 |---|---|---|---|
 | `POST` | `/escrow/deals/{id}/deposit` | Создать депозитный адрес | JWT (участник) |
 
+Ответ `EscrowOut` включает поля `deal_price` (цена сделки) и `network_fee` (резерв на комиссию сети, = `expected_amount - deal_price`). Поле `expected_amount` = `deal_price + TON_RESERVE_TON`.
+
 Эндпоинты confirm, release, refund удалены — worker вызывает сервисные функции `escrow_service` напрямую, минуя HTTP.
 
 ### Stats (`/stats`)
@@ -526,7 +536,7 @@ Shared service layer для бизнес-логики сделок. Извлеч
 - `send_creative_to_advertiser(deal, creative, advertiser)` → отправка креатива рекламодателю
 
 **Бизнес-операции:**
-- `do_update_terms(db, deal_id, actor_user_id, fields)` → `Deal` — фиксация условий
+- `do_update_terms(db, deal_id, actor_user_id, fields)` → `Deal` — фиксация условий (игнорирует `price` из fields, если сделка привязана к листингу с установленной ценой)
 - `do_update_publish_at(db, deal_id, actor_user_id, publish_at)` → `Deal` — установка даты публикации
 - `do_update_status(db, deal_id, actor_user_id, new_status)` → `Deal` — изменение статуса
 - `do_create_creative(db, deal_id, actor_user_id, text, media_file_ids)` → `Creative` — создание креатива
@@ -557,7 +567,8 @@ Shared service layer для бизнес-логики сделок. Извлеч
 
 Интеграция с блокчейном TON через toncenter API (v2 + v3):
 
-- `create_deposit_wallet(deal_id)` — генерация нового TON-кошелька (v4r2)
+- `create_deposit_wallet(deal_id)` — генерация нового TON-кошелька (v4r2); адрес генерируется в **non-bounceable** формате, чтобы средства не отскакивали обратно на неинициализированный контракт
+- `_normalize_address(value)` — нормализация адреса в raw-формат (`wc:hex`) для однозначного сравнения (без зависимости от testnet/bounceable/url-safe флагов)
 - `encrypt_deposit_key(key)` / `decrypt_deposit_key(value)` — AES-GCM шифрование мнемоники; `decrypt_deposit_key` бросает `ValueError` при любой ошибке дешифровки (невалидные данные, неверный ключ, повреждённый blob)
 - `build_deposit_comment(deal_id)` — формирование комментария `deal:<id>`
 - `find_incoming_tx(address, amount, comment)` — поиск входящей транзакции по адресу/сумме/комментарию
@@ -566,11 +577,14 @@ Shared service layer для бизнес-логики сделок. Извлеч
 - `send_sweep(key, address)` — отправка всего остатка на адрес рекламодателя (mode 128)
 - Поддержка кошельков: v1r1–v4r2, v5r1 (автоопределение версии)
 - Fallback: v3 API → v2 API при ошибках
-- Retry: до 3 попыток при transient-ошибках
+- Retry: до **4 повторных попыток** при transient-ошибках (429, 500, 502, 503, 504) и `ConnectionError`
+- **Exponential backoff**: 1 с → 2 с → 4 с → 8 с между попытками; при `429` учитывается заголовок `Retry-After`
 
 ### stats_service.py
 
 - `fetch_stats(chat_id)` — получение статистики канала через MTProto (Telethon, `GetBroadcastStatsRequest`)
+- `_resolve_async_graph(client, graph)` — резолвит `StatsGraphAsync` токен через `LoadAsyncGraphRequest` и парсит данные графа в `{name: fraction}`
+- `_parse_graph_json(raw_json)` — парсит JSON из Telegram-графика статистики в словарь `{язык: доля}` (0..1)
 - `fetch_bot_api_subscribers(chat_id)` — fallback: количество подписчиков через Bot API
 
 ### telegram_service.py
@@ -637,7 +651,7 @@ scan_escrow_deposits → check_verification_windows → sweep_completed_deposits
 process_scheduled_posts → check_deleted_posts → check_payment_timeouts → sleep(20) → повтор
 ```
 
-> Tamper detection выполняется отдельным watcher-ботом (см. [watcher.md](watcher.md)).
+> Tamper/deletion detection выполняется отдельным watcher userbot на Telethon (см. [watcher.md](watcher.md)).
 
 ---
 
@@ -667,6 +681,7 @@ process_scheduled_posts → check_deleted_posts → check_payment_timeouts → s
 | `0004_deal_brief` | Добавлено поле `brief` в deals |
 | `0005_user_tg_username` | Добавлено поле `tg_username` в users |
 | `0006_sweep_fields` | Добавлены поля `sweep_tx_hash`, `swept_at` для sweep остатков escrow |
+| `0007_extended_channel_stats` | Расширена статистика каналов: `shares_per_post`, `reactions_per_post`, `enabled_notifications`, `*_prev` поля для трендов |
 
 ---
 

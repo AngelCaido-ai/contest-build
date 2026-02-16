@@ -93,6 +93,7 @@ def create_deal(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         advertiser_id = user.id
         channel_id = channel.id
+        payload.price = listing.price_usd
     else:
         request_item = db.get(Request, payload.request_id)
         if not request_item:
@@ -204,6 +205,13 @@ def get_deal(
             title=channel.title,
             subscribers=stats.subscribers if stats else None,
             views_per_post=stats.views_per_post if stats else None,
+            shares_per_post=stats.shares_per_post if stats else None,
+            reactions_per_post=stats.reactions_per_post if stats else None,
+            enabled_notifications=stats.enabled_notifications if stats else None,
+            subscribers_prev=stats.subscribers_prev if stats else None,
+            views_per_post_prev=stats.views_per_post_prev if stats else None,
+            shares_per_post_prev=stats.shares_per_post_prev if stats else None,
+            reactions_per_post_prev=stats.reactions_per_post_prev if stats else None,
         )
 
     advertiser_info = None

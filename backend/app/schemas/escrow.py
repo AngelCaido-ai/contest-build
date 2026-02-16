@@ -13,6 +13,8 @@ class EscrowOut(BaseModel):
     deposit_address: str
     deposit_comment: str | None
     expected_amount: float | None
+    deal_price: float | None = None
+    network_fee: float | None = None
     tx_hash: str | None
     confirmed_at: datetime | None
     release_tx_hash: str | None

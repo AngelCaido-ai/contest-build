@@ -12,13 +12,9 @@ import {
 import { ApiError, apiFetch, uploadMedia } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
+import { ChannelStatsCard } from "../components/ChannelStatsCard";
 import type { ListingDetail, MediaFileId } from "../types";
 import { DateTimePickerField, localInputToIso } from "../components/DateTimePickerField";
-
-function formatNumber(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("en-US").format(value);
-}
 
 
 
@@ -27,7 +23,6 @@ export function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [dealPrice, setDealPrice] = useState("");
   const [dealFormat, setDealFormat] = useState("post");
   const [publishAt, setPublishAt] = useState("");
   const [verificationWindow, setVerificationWindow] = useState("");
@@ -45,22 +40,20 @@ export function ListingDetailPage() {
 
   useEffect(() => {
     if (!listing) return;
-    if (listing.price_usd != null) setDealPrice(String(listing.price_usd));
     if (listing.format) setDealFormat(listing.format);
   }, [listing]);
 
   const respond = async () => {
     if (!listing) return;
     try {
-      const parsedPrice = dealPrice.trim() ? Number(dealPrice) : null;
       const parsedWindow = verificationWindow.trim() ? Number(verificationWindow) : null;
       const publishAtIso = localInputToIso(publishAt);
       if (publishAt.trim() && !publishAtIso) {
         showToast("Invalid publish date", { type: "error" });
         return;
       }
-      if ((dealPrice.trim() && Number.isNaN(parsedPrice)) || (verificationWindow.trim() && Number.isNaN(parsedWindow))) {
-        showToast("Price and verification window must be numbers", { type: "error" });
+      if (verificationWindow.trim() && Number.isNaN(parsedWindow)) {
+        showToast("Verification window must be a number", { type: "error" });
         return;
       }
       const deal = await apiFetch<{ id: number }>("/deals", {
@@ -68,7 +61,6 @@ export function ListingDetailPage() {
         body: JSON.stringify({
           listing_id: listing.id,
           channel_id: listing.channel_id,
-          price: parsedPrice ?? listing.price_usd ?? null,
           format: dealFormat.trim() || listing.format,
           brief: brief.trim() || null,
           publish_at: publishAtIso,
@@ -161,20 +153,7 @@ export function ListingDetailPage() {
         />
       </Group>
 
-      <Group header="Stats">
-        <GroupItem
-          text="Subscribers"
-          after={<Text type="body">{formatNumber(stats?.subscribers ?? null)}</Text>}
-        />
-        <GroupItem
-          text="Views per post"
-          after={<Text type="body">{formatNumber(stats?.views_per_post ?? null)}</Text>}
-        />
-        <GroupItem
-          text="Source"
-          after={<Text type="body">{stats?.source ?? "—"}</Text>}
-        />
-      </Group>
+      <ChannelStatsCard stats={stats} />
 
       <Group header="Terms">
         <GroupItem
@@ -222,13 +201,6 @@ export function ListingDetailPage() {
 
       <Group header="Response">
         <div className="flex flex-col gap-3 px-4 py-3">
-          <Input
-            placeholder="Your price (optional)"
-            type="text"
-            value={dealPrice}
-            onChange={(v) => setDealPrice(v)}
-            numeric
-          />
           <Input
             placeholder="Format"
             type="text"

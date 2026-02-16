@@ -35,15 +35,23 @@ def create_deposit_address(
     deal = _lock_row(db, Deal, Deal.id == deal_id)
     existing = _lock_row(db, EscrowPayment, EscrowPayment.deal_id == deal_id)
     if existing:
-        return EscrowOut.model_validate(existing)
+        return _enrich_escrow_out(existing, deal)
     if deal.status not in {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     try:
         payment = create_deposit(db, deal, payload.expected_amount)
         logger.info("create_deposit: success deal_id=%s user_id=%s", deal_id, user.id)
-        return EscrowOut.model_validate(payment)
+        return _enrich_escrow_out(payment, deal)
     except HTTPException:
         raise
     except Exception:
         logger.exception("create_deposit: error deal_id=%s user_id=%s", deal_id, user.id)
         raise
+
+
+def _enrich_escrow_out(payment: EscrowPayment, deal: Deal) -> EscrowOut:
+    out = EscrowOut.model_validate(payment)
+    out.deal_price = float(deal.price) if deal.price is not None else None
+    if out.expected_amount is not None and out.deal_price is not None:
+        out.network_fee = round(out.expected_amount - out.deal_price, 8)
+    return out

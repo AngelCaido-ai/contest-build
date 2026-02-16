@@ -17,7 +17,6 @@ from tonsdk.contract.wallet import Wallets, WalletVersionEnum
 from tonsdk.utils import Address, bytes_to_b64str, to_nano
 
 from app.core.config import settings
-from app.utils.ton_address import validate_ton_address
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +52,11 @@ def _is_testnet() -> bool:
     return "testnet" in settings.ton_api_url.lower()
 
 
+_TONCENTER_MAX_RETRIES = 4
+_TONCENTER_BACKOFF_BASE = 1.0
+_TONCENTER_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
 def _toncenter_request(
     method: str,
     path: str,
@@ -67,15 +71,51 @@ def _toncenter_request(
     if settings.ton_api_key:
         params.setdefault("api_key", settings.ton_api_key)
         headers["X-API-Key"] = settings.ton_api_key
-    response = requests.request(
-        method,
-        url,
-        params=params,
-        json=payload,
-        headers=headers or None,
-        timeout=settings.ton_api_timeout_seconds,
-    )
-    response.raise_for_status()
+
+    last_exc: Exception | None = None
+    for attempt in range(_TONCENTER_MAX_RETRIES + 1):
+        try:
+            response = requests.request(
+                method,
+                url,
+                params=params,
+                json=payload,
+                headers=headers or None,
+                timeout=settings.ton_api_timeout_seconds,
+            )
+            if response.status_code in _TONCENTER_RETRYABLE_STATUSES and attempt < _TONCENTER_MAX_RETRIES:
+                delay = _TONCENTER_BACKOFF_BASE * (2 ** attempt)
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        delay = max(delay, float(retry_after))
+                    except (ValueError, TypeError):
+                        pass
+                logger.warning(
+                    "toncenter %s %s returned %s, retry %d/%d in %.1fs",
+                    method, path, response.status_code,
+                    attempt + 1, _TONCENTER_MAX_RETRIES, delay,
+                )
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            break
+        except requests.exceptions.ConnectionError as exc:
+            last_exc = exc
+            if attempt < _TONCENTER_MAX_RETRIES:
+                delay = _TONCENTER_BACKOFF_BASE * (2 ** attempt)
+                logger.warning(
+                    "toncenter %s %s connection error, retry %d/%d in %.1fs",
+                    method, path, attempt + 1, _TONCENTER_MAX_RETRIES, delay,
+                )
+                time.sleep(delay)
+                continue
+            raise
+    else:
+        if last_exc:
+            raise last_exc
+        response.raise_for_status()
+
     try:
         data = response.json()
     except ValueError as exc:
@@ -198,7 +238,11 @@ def build_deposit_comment(deal_id: int) -> str:
 def _normalize_address(value: str | None) -> str:
     if not value:
         return ""
-    return validate_ton_address(value)
+    try:
+        addr = Address(value)
+        return f"{addr.wc}:{addr.hash_part.hex()}"
+    except Exception:
+        return value
 
 
 def _extract_comment(in_msg: dict) -> str | None:
@@ -525,7 +569,7 @@ def create_deposit_wallet(deal_id: int) -> tuple[str, str]:
     try:
         mnemonics, _, _, wallet = Wallets.create(WalletVersionEnum.v4r2, 0)
         deposit_key = " ".join(mnemonics)
-        deposit_address = wallet.address.to_string(True, True, True, is_test_only=_is_testnet())
+        deposit_address = wallet.address.to_string(True, True, False, is_test_only=_is_testnet())
         logger.info("create_deposit_wallet: deal_id=%s address=%s", deal_id, deposit_address)
         return deposit_address, deposit_key
     except Exception:

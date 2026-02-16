@@ -141,6 +141,9 @@ services:
     environment:
       API_BASE_URL: http://backend:8000
       BOT_SECRET: "${BOT_SECRET}"
+      TELETHON_API_ID: "${TELETHON_API_ID}"
+      TELETHON_API_HASH: "${TELETHON_API_HASH}"
+      TELETHON_SESSION: "${TELETHON_SESSION}"
     depends_on:
       backend:
         condition: service_healthy
@@ -148,8 +151,8 @@ services:
       - bash
       - -c
       - |
-        if [ -z "$$WATCHER_BOT_TOKEN" ]; then
-          echo "WATCHER_BOT_TOKEN is empty, waiting..."
+        if [ -z "$$TELETHON_SESSION" ]; then
+          echo "TELETHON_SESSION is empty, waiting..."
           while true; do sleep 3600; done
         else
           python -m watcher.app.main

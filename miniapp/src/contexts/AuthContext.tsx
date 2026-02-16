@@ -22,11 +22,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  const fetchProfile = useCallback(async () => {
+    try {
+      const me = await apiFetch<User>("/auth/me");
+      setUser(me);
+    } catch {
+      /* token expired or invalid — ignore */
+    }
+  }, []);
+
   const authenticate = useCallback(async () => {
     try {
       const tg = window.Telegram?.WebApp;
       const initData = tg?.initData ?? "";
       if (!initData) {
+        if (getAuthToken()) {
+          await fetchProfile();
+        }
         setIsReady(true);
         return;
       }
@@ -39,6 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       );
       if (!res.ok) {
+        if (getAuthToken()) {
+          await fetchProfile();
+        }
         setIsReady(true);
         return;
       }
@@ -50,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setIsReady(true);
     }
-  }, []);
+  }, [fetchProfile]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;

@@ -152,8 +152,24 @@ export function PaymentPage() {
           </Group>
 
           <Group header="Amount">
+            {escrow.deal_price != null && (
+              <GroupItem
+                text="Deal price"
+                after={<Text type="body">{escrow.deal_price} TON</Text>}
+              />
+            )}
+            {escrow.network_fee != null && escrow.network_fee > 0 && (
+              <GroupItem
+                text="Network fee"
+                after={
+                  <Text type="body" color="secondary">
+                    +{escrow.network_fee} TON
+                  </Text>
+                }
+              />
+            )}
             <GroupItem
-              text="To pay"
+              text="Total"
               after={
                 <Text type="body" weight="bold">
                   {escrow.expected_amount != null

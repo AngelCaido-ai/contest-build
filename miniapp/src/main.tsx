@@ -9,6 +9,7 @@ import {
   ErrorBoundary,
   GlobalErrorFallback,
 } from "./components/ErrorBoundary";
+import { NetworkGuard } from "./components/NetworkGuard";
 
 const manifestUrl = new URL(
   "tonconnect-manifest.json",
@@ -22,6 +23,7 @@ if (root) {
       <ThemeProvider>
         <TonConnectUIProvider manifestUrl={manifestUrl}>
           <ToastProvider>
+            <NetworkGuard />
             <App />
           </ToastProvider>
         </TonConnectUIProvider>

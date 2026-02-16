@@ -1,13 +1,11 @@
 import logging
 
 import httpx
-from aiogram import Router
-from aiogram.types import Message
+from telethon import events
 
 from watcher.app.config import settings
 
 logger = logging.getLogger(__name__)
-router = Router()
 
 _client: httpx.AsyncClient | None = None
 
@@ -34,48 +32,37 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
-async def _mark_tamper(channel_tg_chat_id: int, message_id: int) -> None:
+async def _call_api(endpoint: str, channel_tg_chat_id: int, message_id: int) -> None:
     try:
         client = _get_client()
         resp = await client.post(
-            "/bot/tamper",
+            endpoint,
             json={"channel_tg_chat_id": channel_tg_chat_id, "message_id": message_id},
         )
         resp.raise_for_status()
-        logger.info("mark_tamper: ok channel=%s message=%s", channel_tg_chat_id, message_id)
+        logger.info("%s: ok channel=%s message=%s", endpoint, channel_tg_chat_id, message_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            logger.debug("%s: not found channel=%s message=%s (not tracked)", endpoint, channel_tg_chat_id, message_id)
+        else:
+            logger.exception("%s: http error channel=%s message=%s", endpoint, channel_tg_chat_id, message_id)
     except Exception:
-        logger.exception("mark_tamper: error channel=%s message=%s", channel_tg_chat_id, message_id)
+        logger.exception("%s: error channel=%s message=%s", endpoint, channel_tg_chat_id, message_id)
 
 
-async def _handle_edit(message: Message) -> None:
-    if not message.chat or not message.message_id:
+async def on_message_edited(event: events.MessageEdited.Event) -> None:
+    if not event.is_channel:
         return
-    if message.chat.type not in {"channel", "supergroup", "group"}:
+    chat_id = event.chat_id
+    message_id = event.message.id
+    logger.info("edit detected: chat_id=%s message_id=%s", chat_id, message_id)
+    await _call_api("/bot/tamper", chat_id, message_id)
+
+
+async def on_message_deleted(event: events.MessageDeleted.Event) -> None:
+    chat_id = event.chat_id
+    if not chat_id:
         return
-    channel_id = message.chat.id
-    if message.sender_chat and message.sender_chat.id:
-        channel_id = message.sender_chat.id
-    logger.info(
-        "edit detected: chat_id=%s sender_chat_id=%s message_id=%s",
-        message.chat.id,
-        message.sender_chat.id if message.sender_chat else None,
-        message.message_id,
-    )
-    await _mark_tamper(channel_id, message.message_id)
-
-
-@router.edited_channel_post()
-async def on_edited_channel_post(message: Message) -> None:
-    await _handle_edit(message)
-
-
-@router.edited_message()
-async def on_edited_message(message: Message) -> None:
-    await _handle_edit(message)
-
-
-@router.channel_post()
-async def on_channel_post(message: Message) -> None:
-    if not message.edit_date:
-        return
-    await _handle_edit(message)
+    for msg_id in event.deleted_ids:
+        logger.info("delete detected: chat_id=%s message_id=%s", chat_id, msg_id)
+        await _call_api("/bot/deleted", chat_id, msg_id)
