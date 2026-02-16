@@ -1,8 +1,8 @@
 # Telegram Ads Marketplace
 
-**Demo bot:** [@build_contest_ads_bot](https://t.me/build_contest_ads_bot) (needs to be made admin of the channel where ads will be published)
-
-**Watcher bot:** [@build_contest_ads_watcher_bot](https://t.me/build_contest_ads_watcher_bot) (must also be added as channel admin)
+> **Required for operation:**  
+> • **Demo bot:** [@build_contest_ads_bot](https://t.me/build_contest_ads_bot) — must be admin of the channel where ads will be published  
+> • **Watcher user:** [@angelcaido_ai](https://t.me/angelcaido_ai) — must also be added as channel admin  
 
 A fully functional two-sided marketplace for Telegram channel advertising, built as a **Telegram Mini App + Bot** with on-chain **TON escrow**, automated post publishing, verified channel statistics, and tamper/deletion detection.
 
