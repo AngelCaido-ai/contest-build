@@ -17,9 +17,6 @@ A fully functional two-sided marketplace for Telegram channel advertising, built
 
 ## Demo
 
-> [!NOTE]
-> The video player renders on GitHub. [Click here to download/view the demo](demo/demo-miniapp.mp4) if it doesn't play below.
-
 [Mini App demo video](https://github.com/AngelCaido-ai/contest-build/raw/main/demo/demo-miniapp.mp4)
 
 ## Table of Contents
