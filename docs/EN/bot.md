@@ -164,7 +164,6 @@ Full single-deal workflow: terms, statuses, creatives, escrow payments.
 |---------|-------------|
 | `/deal DEAL_ID` | Open deal details (becomes active) |
 | `/terms DEAL_ID ...` | Set deal terms in one command |
-| `/status DEAL_ID STATUS` | Change deal status |
 | `/creative DEAL_ID [TEXT]` | Submit creative |
 | `/creative_status DEAL_ID STATUS [COMMENT\|PUBLISH_AT]` | Update creative status |
 
@@ -177,20 +176,11 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
                                       ↘ CANCELED (from most statuses)
 ```
 
-#### Allowed Transitions by Role
-
-**Owner (channel owner):**
-- TERMS_LOCKED, CANCELED, SCHEDULED, POSTED, VERIFYING, RELEASED, REFUNDED
-
-**Advertiser:**
-- AWAITING_PAYMENT, FUNDED, CANCELED
-
 #### FSM States
 
 | StatesGroup | States | Purpose |
 |-------------|--------|---------|
 | `DealTermsState` | `price`, `publish_at`, `verification_window`, `format` | Update deal terms |
-| `DealStatusState` | `status` | Change deal status |
 | `DealPublishAtState` | `publish_at` | Set publication time |
 | `CreativeState` | `content` | Submit creative (text/media) |
 | `CreativeStatusState` | `status`, `comment`, `publish_at` | Advertiser creative review |
@@ -201,7 +191,6 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 
 - `deal:` — deal details
 - `deal_terms:`, `deal_terms_back:`, `deal_terms_cancel:` — edit terms
-- `deal_status:`, `deal_status_set:`, `deal_status_back:`, `deal_status_cancel:` — change status
 - `deal_payment:` — escrow payment details (TON)
 - `deal_creative:`, `deal_creative_back:`, `deal_creative_cancel:` — create creative
 - `deal_creative_status:`, `deal_creative_status_set:`, `deal_creative_status_back:`, `deal_creative_status_cancel:` — creative review

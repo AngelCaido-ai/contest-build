@@ -32,25 +32,6 @@ const CREATIVE_VIEW_STATUSES = new Set<DealStatus>([
   "VERIFYING",
   "RELEASED",
 ]);
-const STATUS_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
-  NEGOTIATING: ["TERMS_LOCKED", "CANCELED"],
-  TERMS_LOCKED: ["AWAITING_PAYMENT", "CREATIVE_DRAFT", "CANCELED"],
-  AWAITING_PAYMENT: ["FUNDED", "CANCELED"],
-  FUNDED: ["CREATIVE_DRAFT", "CANCELED"],
-  CREATIVE_DRAFT: ["CREATIVE_REVIEW", "CANCELED"],
-  CREATIVE_REVIEW: ["APPROVED", "CANCELED"],
-  APPROVED: ["SCHEDULED", "CANCELED"],
-  SCHEDULED: ["POSTED", "CANCELED"],
-  POSTED: ["VERIFYING"],
-  VERIFYING: ["RELEASED", "REFUNDED"],
-  RELEASED: [],
-  REFUNDED: [],
-  CANCELED: [],
-};
-const ROLE_ALLOWED_STATUSES: Record<"owner" | "advertiser", DealStatus[]> = {
-  owner: ["TERMS_LOCKED", "CANCELED", "SCHEDULED", "POSTED", "VERIFYING", "RELEASED", "REFUNDED"],
-  advertiser: ["AWAITING_PAYMENT", "FUNDED", "CANCELED"],
-};
 
 const STATUS_LABELS: Record<DealStatus, string> = {
   NEGOTIATING: "Negotiating",
@@ -134,7 +115,6 @@ export function DealDetailPage() {
   const [termsPublishAt, setTermsPublishAt] = useState("");
   const [termsWindow, setTermsWindow] = useState("");
   const [publishAtValue, setPublishAtValue] = useState("");
-  const [statusValue, setStatusValue] = useState<string | null>(null);
   const [creativeText, setCreativeText] = useState("");
   const [creativeMedia, setCreativeMedia] = useState<MediaFileId[]>([]);
   const [creativeUploading, setCreativeUploading] = useState(false);
@@ -182,9 +162,6 @@ export function DealDetailPage() {
   const isAdvertiser = user?.id === deal.advertiser_id;
   const role: "owner" | "advertiser" = isAdvertiser ? "advertiser" : "owner";
   const status = deal.status as DealStatus;
-  const allowedStatuses = (STATUS_TRANSITIONS[status] ?? []).filter((item) =>
-    ROLE_ALLOWED_STATUSES[role].includes(item),
-  );
   const canEditTerms = role === "owner" && (status === "NEGOTIATING" || status === "TERMS_LOCKED");
   const canSetPublishAt =
     role === "owner" &&
@@ -195,7 +172,7 @@ export function DealDetailPage() {
   const canViewCreative = CREATIVE_VIEW_STATUSES.has(status);
   const wizardSteps = [
     ...(canEditTerms ? [{ key: "terms", title: "Terms" }] : []),
-    ...(canSetPublishAt || allowedStatuses.length > 0 ? [{ key: "workflow", title: "Date & Status" }] : []),
+    ...(canSetPublishAt ? [{ key: "workflow", title: "Date" }] : []),
     ...(canCreateCreative ? [{ key: "creative", title: "Creative" }] : []),
     ...(canReviewCreative ? [{ key: "review", title: "Review" }] : []),
     ...(canSendBrief ? [{ key: "brief", title: "Brief" }] : []),
@@ -204,10 +181,6 @@ export function DealDetailPage() {
   const safeWizardStep = wizardSteps.length > 0 ? Math.min(wizardStep, wizardSteps.length - 1) : 0;
   const activeWizardStep = wizardSteps[safeWizardStep]?.key ?? null;
   const isStepVisible = (key: string) => wizardSteps.length === 0 || activeWizardStep === key;
-  const statusOptions = allowedStatuses.map((s) => ({
-    value: s,
-    label: STATUS_LABELS[s] ?? s,
-  }));
   const creativeStatusOptions = [
     { value: "APPROVED", label: "Approve" },
     { value: "DRAFT", label: "Request changes" },
@@ -321,49 +294,6 @@ export function DealDetailPage() {
     });
   };
 
-  const submitStatus = async (selectedStatus?: string) => {
-    await withSubmitting(async () => {
-      const target = selectedStatus ?? statusValue ?? allowedStatuses[0];
-      if (!target) {
-        throw new Error("Select a status");
-      }
-      await apiFetch(`/deals/${deal.id}/status`, {
-        method: "POST",
-        body: JSON.stringify({ status: target }),
-      });
-      showToast("Status updated", { type: "success" });
-    });
-  };
-
-  const handleStatusUpdate = () => {
-    const target = statusValue ?? allowedStatuses[0];
-    if (!target) return;
-
-    const label = STATUS_LABELS[target as DealStatus] ?? target;
-
-    if (target === "CANCELED") {
-      setConfirmAction({
-        title: "Cancel this deal?",
-        description: "This action cannot be undone. The deal will be permanently canceled.",
-        confirmLabel: "Cancel Deal",
-        onConfirm: () => {
-          setConfirmAction(null);
-          submitStatus(target);
-        },
-      });
-    } else {
-      setConfirmAction({
-        title: `Change status to "${label}"?`,
-        description: `The deal status will be updated from ${STATUS_LABELS[status]} to ${label}.`,
-        confirmLabel: "Update Status",
-        onConfirm: () => {
-          setConfirmAction(null);
-          submitStatus(target);
-        },
-      });
-    }
-  };
-
   const submitCreative = async () => {
     await withSubmitting(async () => {
       if (!creativeText.trim() && creativeMedia.length === 0) {
@@ -460,7 +390,7 @@ export function DealDetailPage() {
     });
   };
 
-  const hasActions = canEditTerms || canSetPublishAt || allowedStatuses.length > 0 || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative;
+  const hasActions = canEditTerms || canSetPublishAt || canCreateCreative || canReviewCreative || canSendBrief || canViewCreative;
 
   return (
     <div className="flex flex-col gap-4">
@@ -692,23 +622,6 @@ export function DealDetailPage() {
               <DateTimePickerField value={publishAtValue} onChange={setPublishAtValue} allowEmpty={false} />
             </div>
             <Button text="Update Date" type="secondary" loading={submitting} onClick={submitPublishAt} />
-          </div>
-        </Group>
-      )}
-
-      {/* Status Change */}
-      {allowedStatuses.length > 0 && isStepVisible("workflow") && (
-        <Group header="Status Change">
-          <div className="flex flex-col gap-3 px-4 py-3">
-            <div className="flex flex-col gap-1">
-              <Text type="caption1" color="secondary">New status</Text>
-              <Select
-                options={statusOptions}
-                value={statusValue ?? (statusOptions.length > 0 ? statusOptions[0].value : null)}
-                onChange={(v) => setStatusValue(v)}
-              />
-            </div>
-            <Button text="Update Status" type="secondary" loading={submitting} onClick={handleStatusUpdate} />
           </div>
         </Group>
       )}

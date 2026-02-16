@@ -164,7 +164,6 @@ Inline-кнопки с префиксами:
 |---------------------|-----------------------------------------------------|
 | `/deal DEAL_ID`     | Открыть детали сделки (становится активной)         |
 | `/terms DEAL_ID ...`| Установить условия сделки одной командой            |
-| `/status DEAL_ID STATUS` | Сменить статус сделки                          |
 | `/creative DEAL_ID [TEXT]`| Отправить креатив                             |
 | `/creative_status DEAL_ID STATUS [COMMENT\|PUBLISH_AT]` | Обновить статус креатива |
 
@@ -177,20 +176,11 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
                                       ↘ CANCELED (из большинства статусов)
 ```
 
-#### Допустимые переходы по ролям
-
-**Owner (владелец канала):**
-- TERMS_LOCKED, CANCELED, SCHEDULED, POSTED, VERIFYING, RELEASED, REFUNDED
-
-**Advertiser (рекламодатель):**
-- AWAITING_PAYMENT, FUNDED, CANCELED
-
 #### FSM-состояния
 
 | StatesGroup          | Состояния                                    | Назначение                        |
 |----------------------|----------------------------------------------|-----------------------------------|
 | `DealTermsState`     | `price`, `publish_at`, `verification_window`, `format` | Обновление условий сделки |
-| `DealStatusState`    | `status`                                     | Смена статуса сделки              |
 | `DealPublishAtState` | `publish_at`                                 | Установка времени публикации      |
 | `CreativeState`      | `content`                                    | Отправка креатива (текст/медиа)   |
 | `CreativeStatusState`| `status`, `comment`, `publish_at`            | Ревью креатива рекламодателем     |
@@ -201,7 +191,6 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 
 - `deal:` — детали сделки
 - `deal_terms:`, `deal_terms_back:`, `deal_terms_cancel:` — редактирование условий
-- `deal_status:`, `deal_status_set:`, `deal_status_back:`, `deal_status_cancel:` — смена статуса
 - `deal_payment:` — детали эскроу-оплаты (TON)
 - `deal_creative:`, `deal_creative_back:`, `deal_creative_cancel:` — создание креатива
 - `deal_creative_status:`, `deal_creative_status_set:`, `deal_creative_status_back:`, `deal_creative_status_cancel:` — ревью креатива

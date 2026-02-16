@@ -27,10 +27,6 @@ DEAL_PREFIX = "deal:"
 DEAL_TERMS_PREFIX = "deal_terms:"
 DEAL_TERMS_BACK_PREFIX = "deal_terms_back:"
 DEAL_TERMS_CANCEL_PREFIX = "deal_terms_cancel:"
-DEAL_STATUS_PREFIX = "deal_status:"
-DEAL_STATUS_SET_PREFIX = "deal_status_set:"
-DEAL_STATUS_BACK_PREFIX = "deal_status_back:"
-DEAL_STATUS_CANCEL_PREFIX = "deal_status_cancel:"
 DEAL_PAYMENT_PREFIX = "deal_payment:"
 DEAL_CREATIVE_PREFIX = "deal_creative:"
 DEAL_CREATIVE_BACK_PREFIX = "deal_creative_back:"
@@ -60,71 +56,10 @@ SWITCH_FROM_STATE_KEY = "switch_from_state"
 SWITCH_FROM_DEAL_KEY = "switch_from_deal_id"
 SWITCH_TARGET_DEAL_KEY = "switch_target_deal_id"
 
-DEAL_STATUSES = {
-    "NEGOTIATING",
-    "TERMS_LOCKED",
-    "AWAITING_PAYMENT",
-    "FUNDED",
-    "CREATIVE_DRAFT",
-    "CREATIVE_REVIEW",
-    "APPROVED",
-    "SCHEDULED",
-    "POSTED",
-    "VERIFYING",
-    "RELEASED",
-    "REFUNDED",
-    "CANCELED",
-}
-
 CREATIVE_STATUSES = {"DRAFT", "REVIEW", "APPROVED"}
-
-ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "NEGOTIATING": {"TERMS_LOCKED", "CANCELED"},
-    "TERMS_LOCKED": {"AWAITING_PAYMENT", "CREATIVE_DRAFT", "CANCELED"},
-    "AWAITING_PAYMENT": {"FUNDED", "CANCELED"},
-    "FUNDED": {"CREATIVE_DRAFT", "CANCELED"},
-    "CREATIVE_DRAFT": {"CREATIVE_REVIEW", "CANCELED"},
-    "CREATIVE_REVIEW": {"APPROVED", "CANCELED"},
-    "APPROVED": {"SCHEDULED", "CANCELED"},
-    "SCHEDULED": {"POSTED", "CANCELED"},
-    "POSTED": {"VERIFYING"},
-    "VERIFYING": {"RELEASED", "REFUNDED"},
-}
 
 ROLE_OWNER = "owner"
 ROLE_ADVERTISER = "advertiser"
-
-ROLE_ALLOWED_STATUSES: dict[str, set[str]] = {
-    ROLE_OWNER: {
-        "TERMS_LOCKED",
-        "CANCELED",
-        "SCHEDULED",
-        "POSTED",
-        "VERIFYING",
-        "RELEASED",
-        "REFUNDED",
-    },
-    ROLE_ADVERTISER: {
-        "AWAITING_PAYMENT",
-        "FUNDED",
-        "CANCELED",
-    },
-}
-
-STATUS_ORDER = [
-    "TERMS_LOCKED",
-    "AWAITING_PAYMENT",
-    "FUNDED",
-    "CREATIVE_DRAFT",
-    "CREATIVE_REVIEW",
-    "APPROVED",
-    "SCHEDULED",
-    "POSTED",
-    "VERIFYING",
-    "RELEASED",
-    "REFUNDED",
-    "CANCELED",
-]
 
 
 class CommandTextFilter(BaseFilter):
@@ -154,10 +89,6 @@ class DealTermsState(StatesGroup):
     publish_at = State()
     verification_window = State()
     format = State()
-
-
-class DealStatusState(StatesGroup):
-    status = State()
 
 
 class DealPublishAtState(StatesGroup):
@@ -201,7 +132,6 @@ DEAL_FLOW_STATES = {
     DealTermsState.publish_at.state,
     DealTermsState.verification_window.state,
     DealTermsState.format.state,
-    DealStatusState.status.state,
     CreativeState.content.state,
     CreativeStatusState.status.state,
     CreativeStatusState.comment.state,
@@ -210,15 +140,6 @@ DEAL_FLOW_STATES = {
 }
 
 
-def _sorted_statuses(statuses: set[str]) -> list[str]:
-    order = {status: index for index, status in enumerate(STATUS_ORDER)}
-    return sorted(statuses, key=lambda status: order.get(status, 999))
-
-
-def _allowed_transitions_for_role(status: str, role: str) -> set[str]:
-    allowed = ALLOWED_TRANSITIONS.get(status, set())
-    role_allowed = ROLE_ALLOWED_STATUSES.get(role, set())
-    return allowed & role_allowed
 
 
 async def _resolve_deal_role(tg_user_id: int, deal: dict) -> str:
@@ -428,7 +349,6 @@ def _state_by_name(value: str) -> State | None:
         DealTermsState.publish_at.state: DealTermsState.publish_at,
         DealTermsState.verification_window.state: DealTermsState.verification_window,
         DealTermsState.format.state: DealTermsState.format,
-        DealStatusState.status.state: DealStatusState.status,
         CreativeState.content.state: CreativeState.content,
         CreativeStatusState.status.state: CreativeStatusState.status,
         CreativeStatusState.comment.state: CreativeStatusState.comment,
@@ -436,16 +356,6 @@ def _state_by_name(value: str) -> State | None:
         DealMessageState.content.state: DealMessageState.content,
     }
     return mapping.get(value)
-
-
-def _status_label(status: str, options: list[str]) -> str:
-    if status == "CANCELED":
-        if len(options) == 2 and "CANCELED" in options:
-            return "Reject"
-        return "Cancel deal"
-    if len(options) == 2 and "CANCELED" in options:
-        return "Accept"
-    return status
 
 
 def _nav_keyboard(back_data: str | None, cancel_data: str):
@@ -461,17 +371,6 @@ def _terms_keyboard(deal_id: int, back_step: str | None):
     back_data = None if back_step is None else f"{DEAL_TERMS_BACK_PREFIX}{deal_id}:{back_step}"
     cancel_data = f"{DEAL_TERMS_CANCEL_PREFIX}{deal_id}"
     return _nav_keyboard(back_data, cancel_data)
-
-
-def _status_keyboard(deal_id: int, statuses: set[str]):
-    options = _sorted_statuses(statuses)
-    builder = InlineKeyboardBuilder()
-    for status in options:
-        builder.button(text=_status_label(status, options), callback_data=f"{DEAL_STATUS_SET_PREFIX}{deal_id}:{status}")
-    builder.button(text="Back", callback_data=f"{DEAL_STATUS_BACK_PREFIX}{deal_id}")
-    builder.button(text="Cancel", callback_data=f"{DEAL_STATUS_CANCEL_PREFIX}{deal_id}")
-    builder.adjust(2)
-    return builder.as_markup()
 
 
 def _creative_status_keyboard(deal_id: int, statuses: list[str]):
@@ -546,7 +445,6 @@ def _deal_actions_keyboard(
     deal_id = deal.get("id")
     status = (deal.get("status") or "").upper()
     publish_at = deal.get("publish_at")
-    allowed_statuses = _allowed_transitions_for_role(status, role)
     builder = InlineKeyboardBuilder()
     if draft_available:
         builder.button(text="Resume draft", callback_data=f"{DEAL_DRAFT_RESUME_PREFIX}{deal_id}")
@@ -584,8 +482,6 @@ def _deal_actions_keyboard(
             text="View previous creative",
             callback_data=f"{DEAL_CREATIVE_PREVIOUS_PREFIX}{deal_id}:{creative_version - 1}",
         )
-    if allowed_statuses:
-        builder.button(text="Change status", callback_data=f"{DEAL_STATUS_PREFIX}{deal_id}")
     builder.button(text="Back to deals", callback_data="menu:deals")
     builder.button(text="Back to menu", callback_data="menu:main")
     builder.adjust(2)
@@ -919,12 +815,6 @@ async def deal_draft_resume(callback: CallbackQuery, state: FSMContext) -> None:
         await _prompt_terms_verification_window(callback.message, deal_id)
     elif draft_state == DealTermsState.format.state:
         await _prompt_terms_format(callback.message, deal_id)
-    elif draft_state == DealStatusState.status.state:
-        allowed = _allowed_transitions_for_role(status, role)
-        if not allowed:
-            await callback.message.answer("No available status transitions.")
-        else:
-            await callback.message.answer("Select new status.", reply_markup=_status_keyboard(deal_id, allowed))
     elif draft_state == CreativeState.content.state:
         await callback.message.answer(
             "Send creative text or attach media.",
@@ -1301,143 +1191,6 @@ async def deal_publish_at_value(message: Message, state: FSMContext) -> None:
         await message.answer(f"Failed to update publish time: {exc}")
     await _clear_state_keep(state)
     await _send_deal_details(message, data["deal_id"], state=state)
-
-
-@router.callback_query(F.data.startswith(DEAL_STATUS_PREFIX))
-async def deal_status_start(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.data:
-        await callback.answer()
-        return
-    deal_id = int(callback.data.split(":", 1)[1])
-    try:
-        deal = await api_client.get_deal(deal_id)
-    except Exception as exc:
-        if callback.message:
-            await callback.message.answer(f"Failed to load deal: {exc}")
-        await callback.answer()
-        return
-    status = (deal.get("status") or "").upper()
-    role = await _resolve_deal_role(callback.from_user.id, deal)
-    allowed = _allowed_transitions_for_role(status, role)
-    draft_available = await _get_deal_draft(state, deal_id) is not None
-    if callback.message:
-        await _set_active_deal(callback.message, state, deal, role, draft_available)
-    await state.update_data(deal_id=deal_id)
-    await state.set_state(DealStatusState.status)
-    if callback.message:
-        if not allowed:
-            await callback.message.answer(
-                "No available status transitions.",
-                reply_markup=_nav_keyboard(
-                    f"{DEAL_STATUS_BACK_PREFIX}{deal_id}",
-                    f"{DEAL_STATUS_CANCEL_PREFIX}{deal_id}",
-                ),
-            )
-        else:
-            await callback.message.answer("Select new status.", reply_markup=_status_keyboard(deal_id, allowed))
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith(DEAL_STATUS_SET_PREFIX))
-async def deal_status_set(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.data or not callback.message:
-        await callback.answer()
-        return
-    _, deal_id_value, status_value = callback.data.split(":", 2)
-    deal_id = int(deal_id_value)
-    status_value = status_value.upper()
-    try:
-        deal = await api_client.get_deal(deal_id)
-    except Exception as exc:
-        await callback.message.answer(f"Failed to load deal: {exc}")
-        await callback.answer()
-        return
-    current = (deal.get("status") or "").upper()
-    role = await _resolve_deal_role(callback.from_user.id, deal)
-    allowed = _allowed_transitions_for_role(current, role)
-    if not allowed:
-        await callback.message.answer("No available status transitions.")
-        await callback.answer()
-        return
-    if status_value not in allowed:
-        await callback.message.answer("Status transition is not allowed.")
-        await callback.answer()
-        return
-    try:
-        await api_client.update_status(
-            deal_id,
-            {"status": status_value, "actor_tg_user_id": callback.from_user.id},
-        )
-        await callback.message.answer("Status updated")
-    except Exception as exc:
-        await callback.message.answer(f"Failed to update status: {exc}")
-    if await state.get_state():
-        await _clear_state_keep(state)
-    await _clear_deal_draft(state, deal_id)
-    await _send_deal_details(callback.message, deal_id, callback.from_user.id, state=state)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith(DEAL_STATUS_BACK_PREFIX))
-async def deal_status_back(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.data or not callback.message:
-        await callback.answer()
-        return
-    deal_id = int(callback.data.split(":", 1)[1])
-    if await state.get_state():
-        await _clear_state_keep(state)
-    await _send_deal_details(callback.message, deal_id, callback.from_user.id, state=state)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith(DEAL_STATUS_CANCEL_PREFIX))
-async def deal_status_cancel(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.data or not callback.message:
-        await callback.answer()
-        return
-    deal_id = int(callback.data.split(":", 1)[1])
-    if await state.get_state():
-        await _clear_state_keep(state)
-    await _send_deal_details(callback.message, deal_id, callback.from_user.id, state=state)
-    await callback.answer()
-
-
-@router.message(DealStatusState.status)
-async def deal_status_value(message: Message, state: FSMContext) -> None:
-    value = (message.text or "").strip().upper()
-    if value not in DEAL_STATUSES:
-        await message.answer("Unknown status.")
-        return
-    data = await state.get_data()
-    deal_id = data.get("deal_id")
-    if deal_id is None:
-        await message.answer("Deal is required.")
-        return
-    try:
-        deal = await api_client.get_deal(deal_id)
-    except Exception as exc:
-        await message.answer(f"Failed to load deal: {exc}")
-        return
-    current = (deal.get("status") or "").upper()
-    role = await _resolve_deal_role(message.from_user.id, deal)
-    allowed = _allowed_transitions_for_role(current, role)
-    if not allowed:
-        await message.answer("No available status transitions.")
-        return
-    if value not in allowed:
-        await message.answer("Status transition is not allowed.")
-        return
-    try:
-        await api_client.update_status(
-            deal_id,
-            {"status": value, "actor_tg_user_id": message.from_user.id},
-        )
-        await message.answer("Status updated")
-    except Exception as exc:
-        await message.answer(f"Failed to update status: {exc}")
-    await _clear_deal_draft(state, deal_id)
-    await _clear_state_keep(state)
-    await _send_deal_details(message, deal_id, state=state)
 
 
 @router.callback_query(F.data.startswith(DEAL_MESSAGE_PREFIX))
@@ -1946,33 +1699,6 @@ async def set_terms(message: Message, state: FSMContext) -> None:
         await message.answer("Terms updated")
     except Exception as exc:
         await message.answer(f"Failed to update terms: {exc}")
-    await _clear_deal_draft(state, deal_id)
-    await _send_deal_details(message, deal_id, state=state, set_active=True)
-
-
-@router.message(Command("status"))
-@router.message(CommandTextFilter("status"))
-async def set_status(message: Message, state: FSMContext) -> None:
-    if await state.get_state():
-        await _clear_state_keep(state)
-    parts = (message.text or "").split()
-    if len(parts) < 3:
-        await message.answer("Usage: /status DEAL_ID STATUS")
-        return
-    try:
-        deal_id = int(parts[1])
-    except ValueError:
-        await message.answer("Usage: /status DEAL_ID STATUS")
-        return
-    status_value = parts[2]
-    try:
-        await api_client.update_status(
-            deal_id,
-            {"status": status_value, "actor_tg_user_id": message.from_user.id},
-        )
-        await message.answer("Status updated")
-    except Exception as exc:
-        await message.answer(f"Failed to update status: {exc}")
     await _clear_deal_draft(state, deal_id)
     await _send_deal_details(message, deal_id, state=state, set_active=True)
 

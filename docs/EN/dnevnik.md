@@ -102,3 +102,12 @@
 ### miniapp
 - Replaced raw JSON textarea for listing constraints with structured UI: Select for language (single choice) and text Input for geo/countries (comma-separated, multiple).
 - `ListingDetailPage`: constraints now displayed as separate GroupItems (Language, Geo) instead of raw JSON.
+- Removed manual status change UI (Status Change dropdown and "Update Status" button) from `DealDetailPage`. Users can no longer manually set deal statuses.
+
+### bot
+- Removed "Change status" inline button from deal card and all related callback handlers (`deal_status_start`, `deal_status_set`, `deal_status_back`, `deal_status_cancel`, `deal_status_value`).
+- Removed `/status` command that allowed manual deal status changes without permission checks.
+- Cleaned up `DealStatusState` FSM state, status transition constants (`ALLOWED_TRANSITIONS`, `ROLE_ALLOWED_STATUSES`, `STATUS_ORDER`, `DEAL_STATUSES`), and helper functions (`_status_keyboard`, `_status_label`, `_sorted_statuses`, `_allowed_transitions_for_role`).
+
+### docs
+- Updated `bot.md` (RU/EN): removed `/status` command, `DealStatusState`, status callback prefixes, and role-based transition section.
