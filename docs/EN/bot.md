@@ -48,6 +48,7 @@ Class `BotSettings` (pydantic-settings), reads environment variables:
 | `API_BASE_URL` | str | `http://localhost:8000` | Backend API base URL |
 | `BOT_SECRET` | str | — | Secret for X-Bot-Secret header |
 | `REDIS_URL` | str | `redis://localhost:6379/1` | Redis URL for FSM storage (DB 1, separate from RQ on DB 0) |
+| `MINIAPP_URL` | str | `""` (empty) | Mini App URL (when set, payment button opens Mini App payment page via WebAppInfo) |
 
 Validator `normalize_env` strips extra quotes and whitespace from variable values.
 
@@ -223,7 +224,9 @@ For each status and role a text hint shows what to do next:
 
 #### Escrow Payment (Payment details)
 
-For advertiser, TON payment link is formed:
+When `MINIAPP_URL` is set, "Pay in app" button opens Mini App payment page (`/deals/{id}/pay`) via Telegram `WebAppInfo`. The page uses TonConnect to send the transaction directly from Mini App.
+
+When `MINIAPP_URL` is not set (fallback), external wallet links are shown:
 - `ton://transfer/...` — standard deep-link
 - `https://app.tonkeeper.com/transfer/...` — Tonkeeper
 
@@ -350,3 +353,4 @@ python -m bot.app.main
 ```
 
 Required env vars: `BOT_TOKEN`, `BOT_SECRET`, `API_BASE_URL`, `REDIS_URL`.
+Optional: `MINIAPP_URL` (for Mini App payment button).

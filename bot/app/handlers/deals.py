@@ -15,9 +15,11 @@ from aiogram.types import (
     InputMediaPhoto,
     InputMediaVideo,
     Message,
+    WebAppInfo,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot.app.config import settings
 from bot.app.services import api_client
 
 logger = logging.getLogger(__name__)
@@ -242,6 +244,8 @@ async def _update_active_deal_pin(
     role: str,
     draft_available: bool,
     creative_version: int | None = None,
+    *,
+    create_if_missing: bool = True,
 ) -> None:
     data = await state.get_data()
     pinned_id = data.get(ACTIVE_DEAL_PIN_KEY)
@@ -266,7 +270,7 @@ async def _update_active_deal_pin(
             updated = True
         except TelegramBadRequest:
             updated = False
-    if not updated:
+    if not updated and create_if_missing:
         pinned_message = await message.answer(text, reply_markup=reply_markup)
         try:
             await bot.pin_chat_message(chat_id, pinned_message.message_id, disable_notification=True)
@@ -297,7 +301,10 @@ async def _refresh_active_deal_pin(
 ) -> None:
     data = await state.get_data()
     if data.get(ACTIVE_DEAL_KEY) == deal.get("id"):
-        await _update_active_deal_pin(message, state, deal, role, draft_available, creative_version)
+        await _update_active_deal_pin(
+            message, state, deal, role, draft_available, creative_version,
+            create_if_missing=False,
+        )
 
 
 async def _clear_active_deal(message: Message, state: FSMContext) -> None:
@@ -927,50 +934,52 @@ async def deal_payment_details(callback: CallbackQuery, state: FSMContext) -> No
         await callback.message.answer(f"Failed to create deposit: {exc}")
         await callback.answer()
         return
-    address = payment.get("deposit_address")
-    comment = payment.get("deposit_comment")
     amount = payment.get("expected_amount")
     deal_price = deal.get("price")
-    amount_nano = None
-    if amount is not None:
-        try:
-            amount_nano = int(Decimal(str(amount)) * Decimal("1000000000"))
-        except (InvalidOperation, ValueError):
-            amount_nano = None
     lines = [
         "Escrow payment details:",
-        f"address: {address}",
-        f"comment: {comment}",
-        f"amount: {amount}",
+        f"amount: {amount} TON",
     ]
     if amount is not None and deal_price is not None:
         try:
             if Decimal(str(amount)) > Decimal(str(deal_price)):
-                lines.append("amount includes reserve for fees.")
+                lines.append("(includes reserve for network fees)")
         except (InvalidOperation, ValueError):
             pass
-    lines.append("Telegram Wallet does not support prefilled payments.")
-    lines.append("After payment, wait for auto-detection or set status to FUNDED.")
+    lines.append("After payment, status will update automatically.")
     builder = InlineKeyboardBuilder()
-    if address:
-        ton_params = {}
-        if amount_nano is not None:
-            ton_params["amount"] = amount_nano
-        if comment:
-            ton_params["text"] = str(comment)
-        ton_url = f"ton://transfer/{address}"
-        if ton_params:
-            ton_url = f"{ton_url}?{urlencode(ton_params)}"
-        builder.button(text="Open TON wallet", url=ton_url)
-        tk_params = {}
-        if amount_nano is not None:
-            tk_params["amount"] = amount_nano
-        if comment:
-            tk_params["text"] = str(comment)
-        tonkeeper_url = f"https://app.tonkeeper.com/transfer/{address}"
-        if tk_params:
-            tonkeeper_url = f"{tonkeeper_url}?{urlencode(tk_params)}"
-        builder.button(text="Open Tonkeeper", url=tonkeeper_url)
+    miniapp_url = settings.miniapp_url.rstrip("/") if settings.miniapp_url else ""
+    if miniapp_url:
+        pay_url = f"{miniapp_url}/#/deals/{deal_id}/pay"
+        builder.button(text="Pay in app", web_app=WebAppInfo(url=pay_url))
+    else:
+        address = payment.get("deposit_address")
+        comment = payment.get("deposit_comment")
+        amount_nano = None
+        if amount is not None:
+            try:
+                amount_nano = int(Decimal(str(amount)) * Decimal("1000000000"))
+            except (InvalidOperation, ValueError):
+                amount_nano = None
+        if address:
+            ton_params = {}
+            if amount_nano is not None:
+                ton_params["amount"] = amount_nano
+            if comment:
+                ton_params["text"] = str(comment)
+            ton_url = f"ton://transfer/{address}"
+            if ton_params:
+                ton_url = f"{ton_url}?{urlencode(ton_params)}"
+            builder.button(text="Open TON wallet", url=ton_url)
+            tk_params = {}
+            if amount_nano is not None:
+                tk_params["amount"] = amount_nano
+            if comment:
+                tk_params["text"] = str(comment)
+            tonkeeper_url = f"https://app.tonkeeper.com/transfer/{address}"
+            if tk_params:
+                tonkeeper_url = f"{tonkeeper_url}?{urlencode(tk_params)}"
+            builder.button(text="Open Tonkeeper", url=tonkeeper_url)
     builder.button(text="Open deal", callback_data=f"{DEAL_PREFIX}{deal_id}")
     builder.adjust(1)
     await callback.message.answer("\n".join(lines), reply_markup=builder.as_markup())

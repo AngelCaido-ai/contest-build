@@ -56,25 +56,21 @@ export function RequestsPage() {
       <Button text="Create Request" type="primary" onClick={() => navigate("/requests/new")} />
 
       <Group header="Filters">
-        <div className="flex gap-2 px-4 py-2">
-          <div className="min-w-0 flex-1">
-            <Input
-              placeholder="Budget from"
-              type="text"
-              numeric
-              value={budgetMin}
-              onChange={(v) => setBudgetMin(v)}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Input
-              placeholder="Budget to"
-              type="text"
-              numeric
-              value={budgetMax}
-              onChange={(v) => setBudgetMax(v)}
-            />
-          </div>
+        <div className="flex flex-col gap-2 px-4 py-2">
+          <Input
+            placeholder="Budget from"
+            type="text"
+            numeric
+            value={budgetMin}
+            onChange={(v) => setBudgetMin(v)}
+          />
+          <Input
+            placeholder="Budget to"
+            type="text"
+            numeric
+            value={budgetMax}
+            onChange={(v) => setBudgetMax(v)}
+          />
         </div>
         <div className="px-4 pb-3">
           <Button text="Apply" type="secondary" onClick={handleApply} />

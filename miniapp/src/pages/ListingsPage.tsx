@@ -58,25 +58,21 @@ export function ListingsPage() {
       <Button text="Create Listing" type="primary" onClick={() => navigate("/listings/new")} />
 
       <Group header="Filters">
-        <div className="flex gap-2 px-4 py-2">
-          <div className="min-w-0 flex-1">
-            <Input
-              placeholder="Price from"
-              type="text"
-              numeric
-              value={priceMin}
-              onChange={(v) => setPriceMin(v)}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Input
-              placeholder="Price to"
-              type="text"
-              numeric
-              value={priceMax}
-              onChange={(v) => setPriceMax(v)}
-            />
-          </div>
+        <div className="flex flex-col gap-2 px-4 py-2">
+          <Input
+            placeholder="Price from"
+            type="text"
+            numeric
+            value={priceMin}
+            onChange={(v) => setPriceMin(v)}
+          />
+          <Input
+            placeholder="Price to"
+            type="text"
+            numeric
+            value={priceMax}
+            onChange={(v) => setPriceMax(v)}
+          />
         </div>
         <div className="px-4 pb-3">
           <Button text="Apply" type="secondary" onClick={handleApply} />

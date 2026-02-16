@@ -48,6 +48,7 @@ bot/
 | `API_BASE_URL` | str   | `http://localhost:8000`   | Базовый URL backend API         |
 | `BOT_SECRET`   | str   | —                         | Секрет для заголовка X-Bot-Secret |
 | `REDIS_URL`    | str   | `redis://localhost:6379/1`| URL Redis для FSM-storage (DB 1, отдельно от RQ на DB 0) |
+| `MINIAPP_URL`  | str   | `""` (пусто)              | URL Mini App (если задан, кнопка оплаты открывает страницу оплаты в Mini App через WebAppInfo) |
 
 Валидатор `normalize_env` снимает лишние кавычки и пробелы из значений переменных.
 
@@ -223,7 +224,9 @@ NEGOTIATING → TERMS_LOCKED → AWAITING_PAYMENT → FUNDED
 
 #### Эскроу-платёж (Payment details)
 
-Для рекламодателя формируется ссылка на оплату в TON:
+Если задана переменная `MINIAPP_URL`, кнопка «Pay in app» открывает страницу оплаты Mini App (`/deals/{id}/pay`) через Telegram `WebAppInfo`. Страница использует TonConnect для отправки транзакции прямо из Mini App.
+
+Если `MINIAPP_URL` не задан (fallback), формируются ссылки на оплату через внешние кошельки:
 - `ton://transfer/...` — стандартная deep-link
 - `https://app.tonkeeper.com/transfer/...` — Tonkeeper
 
@@ -350,3 +353,4 @@ python -m bot.app.main
 ```
 
 Требуемые переменные окружения: `BOT_TOKEN`, `BOT_SECRET`, `API_BASE_URL`, `REDIS_URL`.
+Опциональная: `MINIAPP_URL` (для кнопки оплаты через Mini App).

@@ -172,3 +172,8 @@
 
 ### backend
 - **Bugfix**: Added retry with exponential backoff to `_toncenter_request` in `ton_escrow.py`. Previously, toncenter 429 (Too Many Requests) errors caused `release_payment` and `refund_payment` to fail silently — funds remained stuck in deposit wallets after tampered/verification-failed deals. Now retries up to 4 times (1s → 2s → 4s → 8s backoff) on transient errors (429, 500, 502, 503, 504) and `ConnectionError`, respecting `Retry-After` header.
+
+## 2026-02-17
+
+### bot
+- **Bugfix**: Fixed duplicate deal card messages. After sending a message/creative/status update, the bot sent deal details twice — once as a regular message (from `_send_deal_details`) and once as a new pinned message (from `_update_active_deal_pin` when the old pin couldn't be edited). Added `create_if_missing` parameter to `_update_active_deal_pin`; `_refresh_active_deal_pin` now only tries to edit the existing pin and does not create a new one if editing fails.
