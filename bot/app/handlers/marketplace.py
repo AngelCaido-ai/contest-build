@@ -350,16 +350,32 @@ def _deal_statuses_for_group(group: str) -> list[str] | None:
     return entry.get("statuses")
 
 
-def _main_menu_keyboard():
+def _main_menu_keyboard(has_wallet: bool = False):
     builder = InlineKeyboardBuilder()
     builder.button(text="Listings", callback_data=MENU_LISTINGS)
     builder.button(text="Requests", callback_data=MENU_REQUESTS)
     builder.button(text="Deals", callback_data=MENU_DEALS)
     builder.button(text="Create listing", callback_data=MENU_CREATE_LISTING)
     builder.button(text="Create request", callback_data=MENU_CREATE_REQUEST)
-    builder.button(text="Set TON wallet", callback_data=MENU_WALLET)
-    builder.adjust(2, 2, 2)
+    if not has_wallet:
+        builder.button(text="Set TON wallet", callback_data=MENU_WALLET)
+        builder.adjust(2, 2, 2)
+    else:
+        builder.adjust(2, 2, 1)
     return builder.as_markup()
+
+
+async def _main_menu_for_user(tg_user_id: int):
+    """Build main menu keyboard, hiding 'Set TON wallet' if wallet already linked."""
+    has_wallet = False
+    try:
+        data = await api_client.auth_bot(tg_user_id)
+        user = data.get("user") or {}
+        if user.get("linked_wallet"):
+            has_wallet = True
+    except Exception:
+        logger.exception("_main_menu_for_user: wallet check failed tg_user_id=%s", tg_user_id)
+    return _main_menu_keyboard(has_wallet=has_wallet)
 
 
 def _items_keyboard(
@@ -869,7 +885,7 @@ async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | Non
 @router.message(Command("menu"))
 @router.message(CommandTextFilter("menu"))
 async def show_menu(message: Message) -> None:
-    await message.answer("Choose an action:", reply_markup=_main_menu_keyboard())
+    await message.answer("Choose an action:", reply_markup=await _main_menu_for_user(message.from_user.id))
 
 
 @router.message(Command("wallet"))
@@ -885,7 +901,7 @@ async def set_wallet(message: Message, state: FSMContext) -> None:
 async def cancel_flow(message: Message, state: FSMContext) -> None:
     if await state.get_state():
         await _clear_state_keep(state)
-    await message.answer("Canceled.", reply_markup=_main_menu_keyboard())
+    await message.answer("Canceled.", reply_markup=await _main_menu_for_user(message.from_user.id))
 @router.message(Command("listings"))
 async def list_listings(message: Message, state: FSMContext) -> None:
     await state.update_data(**{LISTING_LIST_PAGE_KEY: 0})
@@ -1090,7 +1106,7 @@ async def create_listing(message: Message, state: FSMContext, bot: Bot) -> None:
 @router.callback_query(F.data == MENU_MAIN)
 async def menu_main(callback: CallbackQuery) -> None:
     if callback.message:
-        await callback.message.answer("Choose an action:", reply_markup=_main_menu_keyboard())
+        await callback.message.answer("Choose an action:", reply_markup=await _main_menu_for_user(callback.from_user.id))
     await callback.answer()
 
 
@@ -1259,7 +1275,7 @@ async def flow_back(callback: CallbackQuery, state: FSMContext) -> None:
     if step == "menu":
         if await state.get_state():
             await _clear_state_keep(state)
-        await callback.message.answer("Choose an action:", reply_markup=_main_menu_keyboard())
+        await callback.message.answer("Choose an action:", reply_markup=await _main_menu_for_user(callback.from_user.id))
         await callback.answer()
         return
     if flow == "listing":
@@ -1283,7 +1299,7 @@ async def flow_cancel(callback: CallbackQuery, state: FSMContext) -> None:
         return
     if await state.get_state():
         await _clear_state_keep(state)
-    await callback.message.answer("Canceled.", reply_markup=_main_menu_keyboard())
+    await callback.message.answer("Canceled.", reply_markup=await _main_menu_for_user(callback.from_user.id))
     await callback.answer()
 
 
@@ -1296,7 +1312,7 @@ async def wallet_address(message: Message, state: FSMContext) -> None:
     payload = {"actor_tg_user_id": message.from_user.id, "linked_wallet": value}
     try:
         await api_client.update_wallet(message.from_user.id, payload)
-        await message.answer("Wallet updated", reply_markup=_main_menu_keyboard())
+        await message.answer("Wallet updated", reply_markup=_main_menu_keyboard(has_wallet=True))
     except Exception as exc:
         await message.answer(f"Failed to update wallet: {exc}")
         return
