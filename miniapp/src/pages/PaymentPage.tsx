@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useTonConnectUI, useTonWallet, CHAIN } from "@tonconnect/ui-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Text,
@@ -24,6 +24,11 @@ export function PaymentPage() {
   const wallet = useTonWallet();
 
   const [sending, setSending] = useState(false);
+
+  const requiredChain =
+    import.meta.env.VITE_TON_NETWORK === "mainnet" ? CHAIN.MAINNET : CHAIN.TESTNET;
+  const wrongNetwork =
+    wallet != null && wallet.account.chain !== requiredChain;
 
   const fetcher = useCallback(
     () =>
@@ -59,12 +64,18 @@ export function PaymentPage() {
       showToast("Please connect a wallet", { type: "error" });
       return;
     }
+    if (wrongNetwork) {
+      const label = requiredChain === CHAIN.TESTNET ? "testnet" : "mainnet";
+      showToast(`Please switch your wallet to ${label}`, { type: "error" });
+      return;
+    }
     setSending(true);
     try {
       const amountNano = Math.round((escrow.expected_amount ?? 0) * 1e9).toString();
       const payload = escrow.deposit_comment ? await buildCommentPayload(escrow.deposit_comment) : undefined;
       await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.now() / 1000) + 600,
+        network: requiredChain,
         messages: [
           {
             address: escrow.deposit_address,
@@ -159,6 +170,15 @@ export function PaymentPage() {
             )}
           </Group>
 
+          {wrongNetwork && (
+            <div className="rounded-lg bg-[var(--tg-theme-destructive-text-color,#e53935)] bg-opacity-10 px-4 py-3">
+              <Text type="body" color="danger">
+                Wrong network! Please switch your wallet to{" "}
+                {requiredChain === CHAIN.TESTNET ? "testnet" : "mainnet"} and reconnect.
+              </Text>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 pt-2">
             {!wallet && (
               <Button
@@ -171,7 +191,7 @@ export function PaymentPage() {
               text={wallet ? "Pay via TonConnect" : "Pay"}
               type="primary"
               loading={sending}
-              disabled={!wallet}
+              disabled={!wallet || wrongNetwork}
               onClick={sendTransaction}
             />
           </div>

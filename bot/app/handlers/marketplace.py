@@ -640,7 +640,7 @@ async def _prompt_request_brief(message: Message) -> None:
     )
 
 
-async def _send_listings(message: Message, state: FSMContext) -> None:
+async def _send_listings(message: Message, state: FSMContext, *, edit: bool = False) -> None:
     data = await state.get_data()
     page = max(int(data.get(LISTING_LIST_PAGE_KEY) or 0), 0)
     limit = LISTINGS_PAGE_SIZE + 1
@@ -665,15 +665,20 @@ async def _send_listings(message: Message, state: FSMContext) -> None:
         lines.append(
             f"#{item.get('id')} channel={item.get('channel_id')} price={price_label} format={item.get('format')}"
         )
-    await message.answer(
-        "\n".join(lines),
-        reply_markup=_items_keyboard(
-            items, LISTING_PREFIX, page=page, has_more=has_more, page_prefix=LISTINGS_PAGE_PREFIX
-        ),
+    text = "\n".join(lines)
+    markup = _items_keyboard(
+        items, LISTING_PREFIX, page=page, has_more=has_more, page_prefix=LISTINGS_PAGE_PREFIX
     )
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except TelegramBadRequest:
+            await message.answer(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
 
 
-async def _send_requests(message: Message, state: FSMContext) -> None:
+async def _send_requests(message: Message, state: FSMContext, *, edit: bool = False) -> None:
     data = await state.get_data()
     page = max(int(data.get(REQUEST_LIST_PAGE_KEY) or 0), 0)
     limit = REQUESTS_PAGE_SIZE + 1
@@ -697,12 +702,17 @@ async def _send_requests(message: Message, state: FSMContext) -> None:
         budget_label = "-" if budget is None else budget
         brief = item.get("brief") or ""
         lines.append(f"#{item.get('id')} budget={budget_label} brief={brief}")
-    await message.answer(
-        "\n".join(lines),
-        reply_markup=_items_keyboard(
-            items, REQUEST_PREFIX, page=page, has_more=has_more, page_prefix=REQUESTS_PAGE_PREFIX
-        ),
+    text = "\n".join(lines)
+    markup = _items_keyboard(
+        items, REQUEST_PREFIX, page=page, has_more=has_more, page_prefix=REQUESTS_PAGE_PREFIX
     )
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except TelegramBadRequest:
+            await message.answer(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
 
 
 def _deal_quick_action(item: dict, role: str) -> tuple[str, str] | None:
@@ -775,7 +785,7 @@ def _deals_keyboard(
     return builder.as_markup()
 
 
-async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | None = None) -> None:
+async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | None = None, *, edit: bool = False) -> None:
     user_id = tg_user_id if tg_user_id is not None else message.from_user.id
     filters = await _get_deal_filters(state)
     status_group = filters.get("status_group") or "all"
@@ -845,10 +855,15 @@ async def _send_deals(message: Message, state: FSMContext, tg_user_id: int | Non
         if next_step:
             line = f"{line} next={next_step}"
         lines.append(line)
-    await message.answer(
-        "\n".join(lines),
-        reply_markup=_deals_keyboard(items, roles_by_id, filters, has_more=has_more, active_id=active_id),
-    )
+    text = "\n".join(lines)
+    markup = _deals_keyboard(items, roles_by_id, filters, has_more=has_more, active_id=active_id)
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except TelegramBadRequest:
+            await message.answer(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
 
 
 @router.message(Command("menu"))
@@ -1113,7 +1128,7 @@ async def deals_page(callback: CallbackQuery, state: FSMContext) -> None:
         return
     page = int(page_raw)
     await _set_deal_filters(state, page=page)
-    await _send_deals(callback.message, state, callback.from_user.id)
+    await _send_deals(callback.message, state, callback.from_user.id, edit=True)
     await callback.answer()
 
 
@@ -1128,7 +1143,7 @@ async def listings_page(callback: CallbackQuery, state: FSMContext) -> None:
         return
     page = int(page_raw)
     await state.update_data(**{LISTING_LIST_PAGE_KEY: page})
-    await _send_listings(callback.message, state)
+    await _send_listings(callback.message, state, edit=True)
     await callback.answer()
 
 
@@ -1143,7 +1158,7 @@ async def requests_page(callback: CallbackQuery, state: FSMContext) -> None:
         return
     page = int(page_raw)
     await state.update_data(**{REQUEST_LIST_PAGE_KEY: page})
-    await _send_requests(callback.message, state)
+    await _send_requests(callback.message, state, edit=True)
     await callback.answer()
 
 
@@ -1156,7 +1171,7 @@ async def deals_status_filter(callback: CallbackQuery, state: FSMContext) -> Non
     if group not in DEAL_STATUS_GROUPS:
         group = "all"
     await _set_deal_filters(state, status_group=group, page=0)
-    await _send_deals(callback.message, state, callback.from_user.id)
+    await _send_deals(callback.message, state, callback.from_user.id, edit=True)
     await callback.answer()
 
 
@@ -1169,7 +1184,7 @@ async def deals_role_filter(callback: CallbackQuery, state: FSMContext) -> None:
     if role not in DEAL_ROLE_OPTIONS:
         role = "all"
     await _set_deal_filters(state, role=role, page=0)
-    await _send_deals(callback.message, state, callback.from_user.id)
+    await _send_deals(callback.message, state, callback.from_user.id, edit=True)
     await callback.answer()
 
 
@@ -1189,7 +1204,7 @@ async def deals_clear_filter(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer()
         return
     await state.update_data(**{DEAL_LIST_FILTERS_KEY: _default_deal_filters()})
-    await _send_deals(callback.message, state, callback.from_user.id)
+    await _send_deals(callback.message, state, callback.from_user.id, edit=True)
     await callback.answer()
 
 

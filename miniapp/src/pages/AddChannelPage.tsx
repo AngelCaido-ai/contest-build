@@ -4,35 +4,50 @@ import { Button, Group, Input, Text, useToast } from "@telegram-tools/ui-kit";
 import { apiFetch } from "../api/client";
 import { useBackButton } from "../hooks/useBackButton";
 
+type AddMode = "username" | "chat_id";
+
 export function AddChannelPage() {
   useBackButton();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const [mode, setMode] = useState<AddMode>("username");
   const [tgChatId, setTgChatId] = useState("");
   const [username, setUsername] = useState("");
   const [title, setTitle] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (!tgChatId.trim()) {
-      showToast("Please enter the channel tg_chat_id", { type: "error" });
-      return;
+    if (mode === "username") {
+      if (!username.trim()) {
+        showToast("Please enter the channel username", { type: "error" });
+        return;
+      }
+    } else {
+      if (!tgChatId.trim()) {
+        showToast("Please enter the channel Chat ID", { type: "error" });
+        return;
+      }
+      const parsedId = Number(tgChatId.trim());
+      if (Number.isNaN(parsedId)) {
+        showToast("Chat ID must be a number", { type: "error" });
+        return;
+      }
     }
-    const parsedId = Number(tgChatId.trim());
-    if (Number.isNaN(parsedId)) {
-      showToast("tg_chat_id must be a number", { type: "error" });
-      return;
-    }
+
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = { bot_admin_status: true };
+      if (mode === "username") {
+        body.username = username.trim();
+      } else {
+        body.tg_chat_id = Number(tgChatId.trim());
+        if (username.trim()) body.username = username.trim();
+      }
+      if (title.trim()) body.title = title.trim();
+
       await apiFetch("/channels", {
         method: "POST",
-        body: JSON.stringify({
-          tg_chat_id: parsedId,
-          username: username.trim() || null,
-          title: title.trim() || null,
-          bot_admin_status: true,
-        }),
+        body: JSON.stringify(body),
       });
       showToast("Channel added", { type: "success" });
       navigate("/channels");
@@ -49,20 +64,56 @@ export function AddChannelPage() {
         Add Channel
       </Text>
 
+      <div
+        className="flex rounded-lg overflow-hidden border border-[var(--tg-theme-hint-color,#ccc)]"
+      >
+        <button
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
+            mode === "username"
+              ? "bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#fff)]"
+              : "bg-[var(--tg-theme-secondary-bg-color,#f0f0f0)] text-[var(--tg-theme-text-color,#000)]"
+          }`}
+          onClick={() => setMode("username")}
+        >
+          By Username
+        </button>
+        <button
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
+            mode === "chat_id"
+              ? "bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#fff)]"
+              : "bg-[var(--tg-theme-secondary-bg-color,#f0f0f0)] text-[var(--tg-theme-text-color,#000)]"
+          }`}
+          onClick={() => setMode("chat_id")}
+        >
+          By Chat ID
+        </button>
+      </div>
+
       <Group header="Channel Data">
         <div className="flex flex-col gap-3 px-4 py-3">
-          <Input
-            placeholder="tg_chat_id (e.g. -100123...)"
-            type="text"
-            value={tgChatId}
-            onChange={(v) => setTgChatId(v)}
-          />
-          <Input
-            placeholder="Channel username (optional)"
-            type="text"
-            value={username}
-            onChange={(v) => setUsername(v)}
-          />
+          {mode === "username" ? (
+            <Input
+              placeholder="@username (e.g. @mychannel)"
+              type="text"
+              value={username}
+              onChange={(v) => setUsername(v)}
+            />
+          ) : (
+            <>
+              <Input
+                placeholder="Chat ID (e.g. -1001234567890)"
+                type="text"
+                value={tgChatId}
+                onChange={(v) => setTgChatId(v)}
+              />
+              <Input
+                placeholder="Channel username (optional)"
+                type="text"
+                value={username}
+                onChange={(v) => setUsername(v)}
+              />
+            </>
+          )}
           <Input
             placeholder="Channel name (optional)"
             type="text"

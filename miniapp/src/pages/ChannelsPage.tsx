@@ -24,6 +24,8 @@ export function ChannelsPage() {
   const [managersLoading, setManagersLoading] = useState(false);
   const [tgAdmins, setTgAdmins] = useState<TgAdmin[]>([]);
   const [adminsLoading, setAdminsLoading] = useState(false);
+  const [unlinkDialogOpen, setUnlinkDialogOpen] = useState(false);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
 
   const fetchChannels = useCallback(() => apiFetch<Channel[]>("/channels"), []);
   const { data: channels, loading, refetch } = useApi(fetchChannels, []);
@@ -117,6 +119,24 @@ export function ChannelsPage() {
     }
   };
 
+  const unlinkChannel = async () => {
+    if (!selectedChannelId) return;
+    setUnlinkLoading(true);
+    try {
+      await apiFetch(`/channels/${selectedChannelId}`, { method: "DELETE" });
+      showToast("Channel unlinked", { type: "success" });
+      setSelectedChannelId(null);
+      setManagers([]);
+      setTgAdmins([]);
+      setUnlinkDialogOpen(false);
+      refetch();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error", { type: "error" });
+    } finally {
+      setUnlinkLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Text type="title2" weight="bold">
@@ -170,6 +190,83 @@ export function ChannelsPage() {
             />
           ))}
         </Group>
+      )}
+
+      {selectedChannelId && selectedChannel && (
+        <Group header={selectedChannel.title ?? selectedChannel.username ?? `#${selectedChannel.tg_chat_id}`}>
+          <GroupItem
+            text="Channel ID"
+            description={String(selectedChannel.tg_chat_id)}
+          />
+          {selectedChannel.username && (
+            <GroupItem text="Username" description={`@${selectedChannel.username}`} />
+          )}
+          {isOwner && (
+            <GroupItem
+              text=""
+              after={
+                <Button
+                  text="Unlink Channel"
+                  type="secondary"
+                  onClick={() => setUnlinkDialogOpen(true)}
+                />
+              }
+            />
+          )}
+        </Group>
+      )}
+
+      {unlinkDialogOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.5)",
+          }}
+          onClick={() => !unlinkLoading && setUnlinkDialogOpen(false)}
+        >
+          <div
+            style={{
+              background: "var(--tg-theme-bg-color, #fff)",
+              borderRadius: 12,
+              padding: 20,
+              maxWidth: 320,
+              width: "90%",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text type="title3" weight="bold" style={{ marginBottom: 8 }}>
+              Unlink channel?
+            </Text>
+            <Text
+              type="caption"
+              style={{ color: "var(--tg-theme-hint-color)", marginBottom: 16 }}
+            >
+              This will remove the channel from your account. Active listings
+              will be deactivated. Channels with active deals cannot be unlinked.
+            </Text>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button
+                text="Cancel"
+                type="secondary"
+                onClick={() => setUnlinkDialogOpen(false)}
+                disabled={unlinkLoading}
+              />
+              <Button
+                text={unlinkLoading ? "Unlinking..." : "Unlink"}
+                type="primary"
+                onClick={unlinkChannel}
+                disabled={unlinkLoading}
+                style={{ background: "var(--tg-theme-destructive-text-color, #e53935)" }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedChannelId && isOwner && (

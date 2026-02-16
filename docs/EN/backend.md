@@ -399,10 +399,11 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| `POST` | `/channels/` | Create channel | JWT |
+| `POST` | `/channels/` | Create channel (by `tg_chat_id` or `username`; if only username is given, chat ID is resolved via Telegram `getChat`) | JWT |
 | `GET` | `/channels/` | List current user channels (owner + manager) | JWT |
 | `GET` | `/channels/{id}` | Get channel | JWT (owner/manager) |
 | `PATCH` | `/channels/{id}` | Update channel | JWT (owner) |
+| `DELETE` | `/channels/{id}` | Unlink channel (deactivates listings, deletes managers/stats; 409 if active deals exist) | JWT (owner) |
 | `POST` | `/channels/{id}/managers` | Add manager | JWT (owner) |
 | `GET` | `/channels/{id}/managers` | List managers | JWT (owner) |
 | `DELETE` | `/channels/{id}/managers/{mid}` | Remove manager | JWT (owner) |
@@ -586,6 +587,7 @@ Functions:
 - `send_media(chat_id, text, media_items)` — send media (photo/video/document/animation, group or single)
 - `upload_media_for_user(chat_id, filename, content, content_type)` — upload file to Telegram and get `file_id`
 - `copy_message(from_chat_id, message_id, to_chat_id)` — copy message (for deleted post check)
+- `get_chat(chat_id_or_username)` — resolve chat by numeric ID or `@username` via `getChat`; returns full chat object
 - `get_chat_administrators(chat_id)` — get chat admin list
 - `is_chat_admin(chat_id, tg_user_id)` — check if user is admin
 

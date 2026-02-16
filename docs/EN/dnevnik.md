@@ -119,3 +119,18 @@
   - Backend: `GET /deals`, `GET /listings`, `GET /requests` (miniapp) and `GET /bot/listings`, `GET /bot/requests` (bot) now accept `limit` (1-50, default 20) and `offset` (default 0) query parameters with `order_by` sorting.
   - Bot: `list_listings` and `list_requests` API client methods now accept `limit`/`offset`. Bot handlers `_send_listings` and `_send_requests` use paginated fetching (8 per page) with Prev/Next inline keyboard buttons. Added `listings_page:` and `requests_page:` callback handlers.
   - Miniapp: Added `usePaginatedApi` hook (fetches PAGE_SIZE+1 to detect hasMore) and `Pagination` component. `DealsPage`, `ListingsPage`, and `RequestsPage` now paginate (20 per page) with Previous/Next buttons.
+
+### backend
+- Added `get_chat(chat_id_or_username)` function to `telegram_service.py` — resolves chat by numeric ID or `@username` via Telegram `getChat` API.
+- `ChannelCreate` schema: `tg_chat_id` is now optional; a `model_validator` requires either `tg_chat_id` or `username`.
+- `POST /channels/` endpoint: when only `username` is provided, resolves `tg_chat_id` via `telegram_service.get_chat()` and auto-fills `title` from Telegram response.
+
+### miniapp
+- `AddChannelPage`: added mode switcher (By Username / By Chat ID). Default mode is "By Username" — user enters `@username` and the backend resolves the channel automatically. "By Chat ID" mode preserved for advanced users.
+
+### backend
+- Added `DELETE /channels/{id}` endpoint — owner can unlink a channel. Deactivates related listings, deletes managers and stats. Returns 409 if there are active (non-terminal) deals referencing the channel.
+
+### miniapp
+- `ChannelsPage`: added channel detail section showing Channel ID and Username when a channel is selected. Owner sees "Unlink Channel" button with a confirmation dialog. On success the channel is removed from the list.
+- Added TON network configuration: new env var `VITE_TON_NETWORK` (`testnet` | `mainnet`, defaults to `testnet`). `PaymentPage` now specifies `network: CHAIN.TESTNET/MAINNET` in `sendTransaction`, checks connected wallet chain, shows wrong-network warning banner, and disables Pay button if wallet is on the wrong network.

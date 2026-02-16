@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.8",
     "@telegram-tools/ui-kit": "^0.2.4",
     "@ton/core": "^0.63.1",
     "@tonconnect/ui-react": "^2.4.1",

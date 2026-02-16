@@ -399,10 +399,11 @@ SCHEDULED → POSTED → VERIFYING → RELEASED
 
 | Метод | Путь | Описание | Авторизация |
 |---|---|---|---|
-| `POST` | `/channels/` | Создать канал | JWT |
+| `POST` | `/channels/` | Создать канал (по `tg_chat_id` или `username`; если передан только username, chat ID резолвится через Telegram `getChat`) | JWT |
 | `GET` | `/channels/` | Список каналов текущего пользователя (owner + manager) | JWT |
 | `GET` | `/channels/{id}` | Получить канал | JWT (owner/manager) |
 | `PATCH` | `/channels/{id}` | Обновить канал | JWT (owner) |
+| `DELETE` | `/channels/{id}` | Отвязать канал (деактивирует листинги, удаляет менеджеров/статистику; 409 если есть активные сделки) | JWT (owner) |
 | `POST` | `/channels/{id}/managers` | Добавить менеджера | JWT (owner) |
 | `GET` | `/channels/{id}/managers` | Список менеджеров | JWT (owner) |
 | `DELETE` | `/channels/{id}/managers/{mid}` | Удалить менеджера | JWT (owner) |
@@ -586,6 +587,7 @@ Shared service layer для бизнес-логики сделок. Извлеч
 - `send_media(chat_id, text, media_items)` — отправка медиа (photo/video/document/animation, группа или одиночное)
 - `upload_media_for_user(chat_id, filename, content, content_type)` — загрузка файла в Telegram и получение `file_id`
 - `copy_message(from_chat_id, message_id, to_chat_id)` — копирование сообщения (для проверки удалённых постов)
+- `get_chat(chat_id_or_username)` — резолв чата по числовому ID или `@username` через Telegram `getChat`; возвращает полный объект чата
 - `get_chat_administrators(chat_id)` — получение списка администраторов чата
 - `is_chat_admin(chat_id, tg_user_id)` — проверка, является ли пользователь админом
 

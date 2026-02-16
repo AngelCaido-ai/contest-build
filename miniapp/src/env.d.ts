@@ -5,6 +5,7 @@ declare global {
     readonly BASE_URL: string;
     readonly VITE_API_BASE?: string;
     readonly VITE_BOT_URL?: string;
+    readonly VITE_TON_NETWORK?: "testnet" | "mainnet";
   }
 
   interface ImportMeta {

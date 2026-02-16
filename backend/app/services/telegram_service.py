@@ -176,6 +176,18 @@ def upload_media_for_user(chat_id: int, filename: str, content: bytes, content_t
         return None
 
 
+def get_chat(chat_id_or_username: int | str) -> dict | None:
+    """Resolve a chat by numeric id or @username via Telegram getChat."""
+    if isinstance(chat_id_or_username, str) and not chat_id_or_username.startswith("@"):
+        chat_id_or_username = f"@{chat_id_or_username}"
+    result = _post("getChat", {"chat_id": chat_id_or_username})
+    if not result:
+        logger.warning("get_chat: failed for %s", chat_id_or_username)
+        return None
+    logger.info("get_chat: resolved %s -> id=%s", chat_id_or_username, result.get("id"))
+    return result
+
+
 def get_chat_administrators(chat_id: int) -> list[dict] | None:
     if not settings.bot_token:
         logger.warning("get_chat_administrators: bot_token not configured")

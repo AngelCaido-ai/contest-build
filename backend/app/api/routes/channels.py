@@ -8,7 +8,10 @@ from app.api.deps import get_current_user, get_db
 from app.models.channel import Channel
 from app.models.channel_manager import ChannelManager
 from app.models.channel_stats import ChannelStats
+from app.models.deal import Deal
+from app.models.listing import Listing
 from app.models.user import User
+from app.services.deal_actions import FINAL_DEAL_STATUSES
 from app.schemas.channel_stats import ChannelStatsOut
 from app.schemas.channel import (
     ChannelCreate,
@@ -52,15 +55,37 @@ def create_channel(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ) -> ChannelOut:
-    existing = db.query(Channel).filter(Channel.tg_chat_id == payload.tg_chat_id).first()
+    tg_chat_id = payload.tg_chat_id
+    username = _normalize_tg_username(payload.username)
+    title = payload.title
+
+    if tg_chat_id is None and username:
+        chat_info = telegram_service.get_chat(username)
+        if not chat_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Channel not found by username. Make sure the bot is added to the channel as admin.",
+            )
+        tg_chat_id = chat_info.get("id")
+        if not tg_chat_id:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to resolve channel ID from Telegram",
+            )
+        if not username:
+            username = chat_info.get("username")
+        if not title:
+            title = chat_info.get("title")
+
+    existing = db.query(Channel).filter(Channel.tg_chat_id == tg_chat_id).first()
     if existing:
-        logger.warning("create_channel: conflict tg_chat_id=%s user_id=%s", payload.tg_chat_id, user.id)
+        logger.warning("create_channel: conflict tg_chat_id=%s user_id=%s", tg_chat_id, user.id)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT)
     try:
         channel = Channel(
-            tg_chat_id=payload.tg_chat_id,
-            username=payload.username,
-            title=payload.title,
+            tg_chat_id=tg_chat_id,
+            username=username,
+            title=title,
             owner_user_id=user.id,
             bot_admin_status=bool(payload.bot_admin_status),
             rights_snapshot=payload.rights_snapshot,
@@ -68,12 +93,12 @@ def create_channel(
         db.add(channel)
         db.commit()
         db.refresh(channel)
-        logger.info("create_channel: success channel_id=%s tg_chat_id=%s user_id=%s", channel.id, payload.tg_chat_id, user.id)
+        logger.info("create_channel: success channel_id=%s tg_chat_id=%s user_id=%s", channel.id, tg_chat_id, user.id)
         return ChannelOut.model_validate(channel)
     except HTTPException:
         raise
     except Exception:
-        logger.exception("create_channel: error tg_chat_id=%s user_id=%s", payload.tg_chat_id, user.id)
+        logger.exception("create_channel: error tg_chat_id=%s user_id=%s", tg_chat_id, user.id)
         raise
 
 
@@ -140,6 +165,46 @@ def update_channel(
         raise
     except Exception:
         logger.exception("update_channel: error channel_id=%s user_id=%s", channel_id, user.id)
+        raise
+
+
+@router.delete("/{channel_id}")
+def delete_channel(
+    channel_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+) -> dict:
+    channel = db.get(Channel, channel_id)
+    if not channel or channel.owner_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    active_deals_count = (
+        db.query(Deal)
+        .filter(Deal.channel_id == channel_id, ~Deal.status.in_(FINAL_DEAL_STATUSES))
+        .count()
+    )
+    if active_deals_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Channel has {active_deals_count} active deal(s). Complete or cancel them first.",
+        )
+    try:
+        db.query(Listing).filter(Listing.channel_id == channel_id).update(
+            {"active": False}, synchronize_session="fetch"
+        )
+        db.query(ChannelManager).filter(ChannelManager.channel_id == channel_id).delete(
+            synchronize_session="fetch"
+        )
+        db.query(ChannelStats).filter(ChannelStats.channel_id == channel_id).delete(
+            synchronize_session="fetch"
+        )
+        db.delete(channel)
+        db.commit()
+        logger.info("delete_channel: success channel_id=%s user_id=%s", channel_id, user.id)
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("delete_channel: error channel_id=%s user_id=%s", channel_id, user.id)
         raise
 
 
