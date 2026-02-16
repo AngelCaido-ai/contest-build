@@ -241,8 +241,6 @@ docker compose up --build
 - API docs: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 
-**Quick test:** Send `/test_deal` to the bot to create a test deal and walk through the full lifecycle.
-
 ## Development Setup
 
 **Requirements:** Python 3.11+, Node.js 18+, PostgreSQL, Redis.
@@ -340,4 +338,5 @@ Documentation is available in [docs/](docs/) in Russian (RU) and English (EN):
 - **V5 batch actions**: combine payout + sweep into a single TON transaction (eliminates separate sweep task)
 - **Extended filters**: subscriber count and language filters for listings/requests
 - **Gasless payments**: V5 wallet extensions for relay-based fee payment in jettons
-- **Production hardening**: automated E2E tests, monitoring dashboards, Sentry integration
+- **Sentry integration**: error monitoring, alerting, and performance tracing across all services — see [integration plan](docs/RU/sentry.md)
+- **Production hardening**: automated E2E tests, monitoring dashboards

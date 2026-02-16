@@ -75,10 +75,6 @@ Registers/updates user via `api_client.upsert_user` and shows available commands
 
 Supports deep link parameter `deal_{id}` (format: `/start deal_123`). When present, activates specified deal in chat — same as `/deal DEAL_ID`. Used by "Go to bot" button in Mini App.
 
-### `start.py` — Command `/test_deal`
-
-Creates test deal: first upsert user via `api_client.upsert_user`, then calls `api_client.create_test_deal`.
-
 ### `onboarding.py` — Command `/add_channel`
 
 Bind Telegram channel to platform:

@@ -24,6 +24,23 @@ export class NetworkError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+  constructor(status: number, detail: unknown) {
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail && typeof (detail as Record<string, unknown>).message === "string"
+          ? (detail as Record<string, string>).message
+          : `API error ${status}`;
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -45,9 +62,7 @@ export async function apiFetch<T = unknown>(
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const detail =
-      typeof data?.detail === "string" ? data.detail : `API error ${res.status}`;
-    throw new Error(detail);
+    throw new ApiError(res.status, data?.detail ?? `API error ${res.status}`);
   }
   return data as T;
 }

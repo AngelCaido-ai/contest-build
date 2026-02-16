@@ -89,3 +89,16 @@
 
 ### backend
 - Fixed missing Telegram notification on deal creation (response to request/listing). Both `bot_create_deal` (`/bot/deals`) and `create_deal` (`/deals`) now call `notify_deal_parties` after successful deal creation, sending deal terms to both advertiser and channel owner.
+- Added duplicate deal prevention for requests: `POST /deals` now returns 409 if an active deal already exists for the same `request_id` + `channel_id`.
+- 409 responses for both listings and requests now include `deal_id` of the existing active deal in the response body.
+
+### miniapp
+- Added `ApiError` class to API client (`client.ts`) — preserves HTTP status code and structured `detail` from backend.
+- `RequestDetailPage` and `ListingDetailPage`: on 409 conflict, the app now navigates to the existing deal instead of showing an error toast.
+
+### docs
+- Added Sentry integration plan (`docs/RU/sentry.md`) and linked it from the Future Work section in README.md.
+
+### miniapp
+- Replaced raw JSON textarea for listing constraints with structured UI: Select for language (single choice) and text Input for geo/countries (comma-separated, multiple).
+- `ListingDetailPage`: constraints now displayed as separate GroupItems (Language, Geo) instead of raw JSON.

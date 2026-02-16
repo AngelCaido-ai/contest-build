@@ -86,7 +86,7 @@ def create_deal(
         if active_deal:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Active deal already exists for this listing",
+                detail={"message": "Active deal already exists for this listing", "deal_id": active_deal.id},
             )
         channel = db.get(Channel, listing.channel_id)
         if not channel:
@@ -102,6 +102,20 @@ def create_deal(
         channel = db.get(Channel, payload.channel_id)
         if not channel or channel.owner_user_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        active_deal = (
+            db.query(Deal)
+            .filter(
+                Deal.request_id == request_item.id,
+                Deal.channel_id == channel.id,
+                ~Deal.status.in_(FINAL_DEAL_STATUSES),
+            )
+            .first()
+        )
+        if active_deal:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"message": "Active deal already exists for this request and channel", "deal_id": active_deal.id},
+            )
         advertiser_id = request_item.advertiser_id
         channel_id = channel.id
     try:

@@ -433,7 +433,7 @@ Any status (except POSTED/VERIFYING/RELEASED/REFUNDED) → CANCELED
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| `POST` | `/deals/` | Create deal (from listing or request); 409 if active deal exists for listing | JWT |
+| `POST` | `/deals/` | Create deal (from listing or request); 409 with `deal_id` if active deal exists for listing or for request+channel | JWT |
 | `GET` | `/deals/` | List current user deals | JWT |
 | `GET` | `/deals/{id}` | Get deal | JWT (participant) |
 | `GET` | `/deals/{id}/events` | Deal event history (newest first) | JWT (participant) |

@@ -9,7 +9,7 @@ import {
   Text,
   useToast,
 } from "@telegram-tools/ui-kit";
-import { apiFetch, uploadMedia } from "../api/client";
+import { ApiError, apiFetch, uploadMedia } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useBackButton } from "../hooks/useBackButton";
 import type { ListingDetail, MediaFileId } from "../types";
@@ -20,14 +20,7 @@ function formatNumber(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function formatMaybeJson(value: unknown): string {
-  if (value == null) return "—";
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return "—";
-  }
-}
+
 
 export function ListingDetailPage() {
   useBackButton();
@@ -99,6 +92,18 @@ export function ListingDetailPage() {
       showToast("Deal created", { type: "success" });
       navigate(`/deals/${deal.id}`);
     } catch (e) {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        e.detail &&
+        typeof e.detail === "object" &&
+        "deal_id" in e.detail
+      ) {
+        const dealId = (e.detail as { deal_id: number }).deal_id;
+        showToast("Deal already exists — opening it", { type: "info" });
+        navigate(`/deals/${dealId}`);
+        return;
+      }
       showToast(e instanceof Error ? e.message : "Error", { type: "error" });
     }
   };
@@ -192,11 +197,27 @@ export function ListingDetailPage() {
       </Group>
 
       <Group header="Constraints">
-        <div className="px-4 py-3">
-          <Text type="body" color="secondary">
-            {formatMaybeJson(listing.constraints)}
-          </Text>
-        </div>
+        <GroupItem
+          text="Language"
+          after={
+            <Text type="body">
+              {(listing.constraints as Record<string, unknown> | null)?.lang
+                ? String((listing.constraints as Record<string, unknown>).lang).toUpperCase()
+                : "—"}
+            </Text>
+          }
+        />
+        <GroupItem
+          text="Geo"
+          after={
+            <Text type="body">
+              {Array.isArray((listing.constraints as Record<string, unknown> | null)?.geo) &&
+              ((listing.constraints as Record<string, unknown>).geo as string[]).length > 0
+                ? ((listing.constraints as Record<string, unknown>).geo as string[]).join(", ")
+                : "—"}
+            </Text>
+          }
+        />
       </Group>
 
       <Group header="Response">
