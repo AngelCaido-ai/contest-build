@@ -15,8 +15,13 @@ A fully functional two-sided marketplace for Telegram channel advertising, built
 - Tamper and deletion detection via a dedicated watcher bot
 - TonConnect-powered payments in the Mini App
 
+## Demo
+
+<video src="demo/demo-miniapp.mp4" controls width="720"></video>
+
 ## Table of Contents
 
+- [Demo](#demo)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Contest Requirements Coverage](#contest-requirements-coverage)
