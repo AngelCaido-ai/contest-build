@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_TRANSITIONS: dict[DealStatus, set[DealStatus]] = {
     DealStatus.NEGOTIATING: {DealStatus.TERMS_LOCKED, DealStatus.CANCELED},
-    DealStatus.TERMS_LOCKED: {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT, DealStatus.CREATIVE_DRAFT, DealStatus.CANCELED},
+    DealStatus.TERMS_LOCKED: {DealStatus.TERMS_LOCKED, DealStatus.AWAITING_PAYMENT, DealStatus.CANCELED},
     DealStatus.AWAITING_PAYMENT: {DealStatus.FUNDED, DealStatus.CANCELED},
     DealStatus.FUNDED: {DealStatus.CREATIVE_DRAFT, DealStatus.CREATIVE_REVIEW, DealStatus.CANCELED, DealStatus.REFUNDED},
     DealStatus.CREATIVE_DRAFT: {DealStatus.CREATIVE_REVIEW, DealStatus.CANCELED},
